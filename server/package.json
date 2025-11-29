@@ -12,9 +12,12 @@
 	"license": "ISC",
 	"dependencies": {
 		"baileys": "^7.0.0-rc.9",
+		"better-auth": "^1.4.3",
+		"better-sqlite3": "^12.5.0",
 		"cors": "^2.8.5",
 		"dotenv": "^17.2.3",
 		"express": "^5.1.0",
+		"kysely": "^0.28.8",
 		"luxon": "^3.7.2",
 		"node-schedule": "^2.1.1",
 		"qrcode-terminal": "^0.12.0"

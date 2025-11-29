@@ -8,6 +8,8 @@ import 'dotenv/config';
 import { SCHEDULE_CONFIG } from './config.js';
 import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys';
 import qrcode from 'qrcode-terminal';
+import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
+import { auth } from "./auth.js";
 
 // ES MODULE PATH SETUP
 const __filename = fileURLToPath(import.meta.url);
@@ -30,8 +32,32 @@ function getTargetTimeForTomorrow(hour, minute, targetTimezone) {
 
 // EXPRESS
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: "http://localhost:5173", // Your React Client URL
+    credentials: true, // Allow cookies to be sent
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.use(express.json());
+app.all("/api/auth/*splat", toNodeHandler(auth));
+
+const protectRoute = async (req, res, next) => {
+    try {
+        const session = await auth.api.getSession({
+            headers: fromNodeHeaders(req.headers)
+        });
+
+        if (!session) {
+            return res.status(401).json({ error: "Unauthorized: Please sign in." });
+        }
+
+        // Attach user to request if you need their ID later
+        req.user = session.user;
+        next();
+    } catch (error) {
+        return res.status(500).json({ error: "Auth check failed" });
+    }
+};
 
 async function sendScheduledMessage(targetJid, messageContent) {
     if (!waSocket || waSocket.user?.id === 'default') {
@@ -56,7 +82,7 @@ async function sendScheduledMessage(targetJid, messageContent) {
 
 // --- API ENDPOINT IMPLEMENTATION ---
 
-app.post('/api/schedule', (req, res) => {
+app.post('/api/schedule', protectRoute, (req, res) => {
     if (!isClientReady) {
         return res.status(503).json({
             error: 'WhatsApp client is still initializing or syncing. Please wait a moment and try again.'
