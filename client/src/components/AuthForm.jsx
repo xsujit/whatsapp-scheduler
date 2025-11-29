@@ -1,3 +1,5 @@
+// client/src/components/AuthForm.jsx
+
 import React, { useState } from "react";
 import { authClient } from "../lib/auth-client";
 import { Button } from "./Button";

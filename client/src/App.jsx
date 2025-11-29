@@ -1,3 +1,5 @@
+// client/src/App.jsx
+
 import React from "react";
 import { authClient } from "./lib/auth-client";
 import { AuthForm } from "./components/AuthForm";

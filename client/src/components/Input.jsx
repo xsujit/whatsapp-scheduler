@@ -1,3 +1,5 @@
+// client/src/components/Input.jsx
+
 import React from "react";
 
 export const Input = ({ label, id, className = "", ...props }) => {
