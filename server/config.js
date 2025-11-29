@@ -1,5 +1,4 @@
-
 export const SCHEDULE_CONFIG = [
-    { chatName: "Test 1", hour: 3, minute: 0 },
-    { chatName: "Test 2", hour: 5, minute: 0 },
+    { JID: "xxx@g.us", hour: 19, minute: 16 },
+    { JID: "xxx@g.us", hour: 19, minute: 17 },
 ];

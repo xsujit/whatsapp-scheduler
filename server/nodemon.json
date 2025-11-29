@@ -1,0 +1,11 @@
+{
+    "watch": [
+        "**/*.js",
+        "**/*.json"
+    ],
+    "ignore": [
+        "baileys_session/**",
+        "node_modules/**"
+    ],
+    "ext": "js,json"
+}
