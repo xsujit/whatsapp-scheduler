@@ -14,6 +14,7 @@ import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, db } from './auth.js';
 import { scheduleRequestSchema } from './lib/validation.js';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { logger } from './lib/logger.js';
 
 // ES MODULE PATH SETUP
 const __filename = fileURLToPath(import.meta.url);
@@ -288,6 +289,7 @@ async function initializeWhatsAppClient() {
         auth: state,
         printQRInTerminal: false,
         browser: ['Ubuntu', 'Chrome', '120.0.0.0'],
+        logger: logger,
     });
 
     waSocket.ev.on('connection.update', async (update) => {
@@ -309,6 +311,7 @@ async function initializeWhatsAppClient() {
         } else if (connection === 'open') {
             console.log('[STATUS] WhatsApp Client Connected.');
             isClientReady = true;
+            await printJidNameDictionary(waSocket);
             console.log('[STATUS] Ready to process schedules.');
         }
     });
@@ -349,3 +352,47 @@ app.listen(PORT, async () => {
 }).on('error', (err) => {
     console.error(`\n[FATAL SERVER STARTUP ERROR]`, err.message);
 });
+
+async function printJidNameDictionary(waSocket) {
+    console.log('\n======================================================');
+    console.log('         WHATSAPP JID/NAME DICTIONARY');
+    console.log('======================================================');
+
+    try {
+        // Use a supported method to get all chats/groups. 
+        // We fetch all groups participating and log their metadata.
+        const allMetadata = await waSocket.groupFetchAllParticipating();
+        const groups = Object.values(allMetadata);
+
+        if (groups.length === 0) {
+            console.log('[WARNING] No group metadata found. Trying alternate fetch...');
+        }
+
+        // Output for Groups and Contacts (using a simplified method)
+        // Note: For individual contacts, Baileys often requires a store/listener 
+        // to populate them fully. Groups are more reliable to fetch directly.
+
+        const outputMap = {};
+
+        // 1. Map Groups
+        groups.forEach(group => {
+            outputMap[group.subject] = group.id;
+        });
+
+        // 2. Add an instruction for individual contacts
+        console.log('\n--- GROUPS (Subject and JID) ---');
+        Object.entries(outputMap).forEach(([name, jid]) => {
+            console.log(`| JID: ${jid} | Name: ${name}`);
+        });
+
+        console.log('\n--- INDIVIDUAL CONTACTS (Requires Manual Lookup) ---');
+        console.log('Individual contacts follow the format: [CountryCode][Number]@s.whatsapp.net');
+        console.log('Example: For contact "+1-555-123-4567", use JID: 15551234567@s.whatsapp.net');
+
+        console.log('\n======================================================');
+        console.log(`ACTION: Copy the required JID(s) above into your SCHEDULE_CONFIG file.`);
+
+    } catch (error) {
+        console.error('[ERROR] Failed to fetch chat dictionary:', error.message);
+    }
+}

@@ -3,7 +3,7 @@
 import { betterAuth } from 'better-auth';
 import Database from 'better-sqlite3';
 import { Kysely, SqliteDialect, sql } from 'kysely';
-import { APIError } from 'better-auth/api';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { serverSignUpSchema } from './lib/validation.js';
 
 // 1. Setup local database
@@ -44,19 +44,23 @@ export const auth = betterAuth({
     },
     trustedOrigins: ['http://localhost:5173'],
     hooks: {
-        before: [
-            {
-                matcher: (context) => context.path === '/sign-up/email',
-                handler: async (c) => {
-                    const result = serverSignUpSchema.safeParse(c.body);
-                    if (!result.success) {
-                        const errorMessage = result.error.issues.map(i => i.message).join(', ');
-                        throw new APIError('BAD_REQUEST', {
-                            message: `Validation Error: ${errorMessage}`
-                        });
-                    }
-                },
-            },
-        ],
+        before: createAuthMiddleware(async (ctx) => {
+            if (ctx.path === "/sign-up/email") {
+                const result = serverSignUpSchema.safeParse(ctx.body);
+
+                if (!result.success) {
+                    const errorMessage = result.error.issues.map(i => i.message).join(", ");
+                    throw new APIError("BAD_REQUEST", {
+                        message: `Validation Error: ${errorMessage}`
+                    });
+                }
+
+                // If successful, the middleware simply returns, allowing the 
+                // sign-up process to continue.
+            }
+
+            // For any other path (like /sign-in/email or /verification/email), 
+            // the middleware does nothing and the request proceeds normally.
+        }),
     },
 });
