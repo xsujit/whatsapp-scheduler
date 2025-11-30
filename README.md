@@ -9,6 +9,7 @@ npm install --omit=dev
 
 # Server
 npx @better-auth/cli@latest migrate
+npm install --omit=dev
 npm run start
 
 # Project Structure

@@ -3,6 +3,7 @@
 import path from 'path';
 import schedule from 'node-schedule';
 import express from 'express';
+import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { DateTime } from 'luxon';
 import 'dotenv/config';
@@ -27,6 +28,7 @@ let isProcessingQueue = false;
 const SEND_DELAY_MS = 3000;
 const SESSION_PATH = path.join(__dirname, 'baileys_session');
 const TARGET_TIMEZONE = process.env.APP_TIMEZONE;
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN;
 const PORT = parseInt(process.env.PORT);
 const SCHEDULE_DAY = parseInt(process.env.SCHEDULE_DAY);
 
@@ -37,8 +39,15 @@ function getTargetTimeForTomorrow(hour, minute, targetTimezone) {
     return targetLuxonTime;
 }
 
-// EXPRESS
 const app = express();
+
+app.use(cors({
+    origin: CLIENT_ORIGIN,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+}));
+
 app.use(express.json());
 app.all('/api/auth/*splat', toNodeHandler(auth));
 
