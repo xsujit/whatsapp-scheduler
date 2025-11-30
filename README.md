@@ -25,6 +25,12 @@ Project Structure
 │   ├── package-lock.json
 │   ├── README.md
 │   ├── vite.config.js
+│   ├── dist/
+│   │   ├── index.html
+│   │   ├── vite.svg
+│   │   └── assets/
+│   │       ├── index-C194uGD1.css
+│   │       └── index-D5XLFjeI.js
 │   ├── public/
 │   │   └── vite.svg
 │   └── src/
@@ -38,9 +44,11 @@ Project Structure
 │       │   ├── AuthForm.jsx
 │       │   ├── Button.jsx
 │       │   ├── Input.jsx
+│       │   ├── JobsHistory.jsx
 │       │   └── Scheduler.jsx
 │       ├── lib/
-│       │   └── auth-client.js
+│       │   ├── auth-client.js
+│       │   └── schemas.js
 │       └── services/
 │           └── scheduleService.js
 └── server/
@@ -50,7 +58,11 @@ Project Structure
     ├── app.db-wal
     ├── auth.js
     ├── config.js
+    ├── ecosystem.config.cjs
     ├── nodemon.json
     ├── package.json
     ├── package-lock.json
     ├── server.js
+    ├── lib/
+    │   ├── logger.js
+    │   └── validation.js

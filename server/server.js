@@ -28,6 +28,7 @@ let isProcessingQueue = false;
 const SEND_DELAY_MS = 3000;
 const SESSION_PATH = path.join(__dirname, 'baileys_session');
 const TARGET_TIMEZONE = process.env.APP_TIMEZONE;
+const SHOW_JID_NAME_DICTIONARY = process.env.SHOW_JID_NAME_DICTIONARY;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN;
 const PORT = parseInt(process.env.PORT);
 const SCHEDULE_DAY = parseInt(process.env.SCHEDULE_DAY);
@@ -50,6 +51,35 @@ app.use(cors({
 
 app.use(express.json());
 app.all('/api/auth/*splat', toNodeHandler(auth));
+
+app.get('/health', (req, res) => {
+    const uptimeSeconds = process.uptime();
+    const uptimeString = new Date(uptimeSeconds * 1000).toISOString().substr(11, 8);
+
+    // 2. Determine WhatsApp Status
+    // We check if the socket exists and if we have a user ID (meaning auth is done)
+    const isWhatsAppConnected = isClientReady && waSocket?.user?.id;
+
+    // 3. Construct the status object
+    const status = {
+        status: 'UP',
+        timestamp: new Date().toISOString(),
+        uptime: uptimeString,
+        service: 'WhatsApp Scheduler',
+        whatsapp: {
+            connected: !!isWhatsAppConnected,
+            // Show the generic status or the specific JID if connected (masked for privacy if needed)
+            jid: isWhatsAppConnected ? waSocket.user.id : 'disconnected'
+        },
+        memory: process.memoryUsage().rss / 1024 / 1024 // Memory in MB
+    };
+
+    // 4. Return 503 if WhatsApp is down, otherwise 200
+    // This allows monitoring tools to alert you if WhatsApp disconnects
+    const httpStatus = isWhatsAppConnected ? 200 : 503;
+
+    res.status(httpStatus).json(status);
+});
 
 const protectRoute = async (req, res, next) => {
     try {
@@ -204,7 +234,8 @@ async function sendScheduledMessage(targetJid, messageContent) {
         console.log(`[FINAL] Baileys message sent to ${targetJid}.`);
         return true;
     } catch (error) {
-        console.error(`[ERROR] Failed to send message to ${targetJid}:`, error.message);
+        console.error(`[ERROR] Failed to send message to ${targetJid}.`);
+        console.error(error);
         return false;
     }
 }
@@ -338,7 +369,9 @@ async function initializeWhatsAppClient() {
         } else if (connection === 'open') {
             console.log('[STATUS] WhatsApp Client Connected.');
             isClientReady = true;
-            await printJidNameDictionary(waSocket);
+            if (SHOW_JID_NAME_DICTIONARY === 'true') {
+                await printJidNameDictionary(waSocket);
+            }
             console.log('[STATUS] Ready to process schedules.');
         }
     });
