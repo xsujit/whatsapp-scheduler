@@ -2,12 +2,16 @@
 Schedule messages on WhatsApp
 
 # Client
+npm i
 npm run build
+rm -rf node_modules
+npm install --omit=dev
 
 # Server
 npx @better-auth/cli@latest migrate
+npm run start
 
-
+# Project Structure
 Project Structure
 ├── .gitignore
 ├── LICENSE

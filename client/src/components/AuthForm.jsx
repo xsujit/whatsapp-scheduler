@@ -6,9 +6,8 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { signUpSchema, signInSchema } from '../lib/schemas';
 
-export const AuthForm = () => {
+export const AuthForm = ({ allowRegistration }) => {
     const [isSignUp, setIsSignUp] = useState(false);
-    
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -29,12 +28,17 @@ export const AuthForm = () => {
         setErrors({});
         setGeneralError(null);
 
+        if (isSignUp && !allowRegistration) {
+            setGeneralError("User registration is currently closed.");
+            return;
+        }
+
         // 1. Select Schema
         const schema = isSignUp ? signUpSchema : signInSchema;
-        
+
         // 2. Prepare Data (exclude name if signing in)
-        const dataToValidate = isSignUp 
-            ? formData 
+        const dataToValidate = isSignUp
+            ? formData
             : { email: formData.email, password: formData.password };
 
         // 3. Validate
@@ -53,16 +57,16 @@ export const AuthForm = () => {
 
         try {
             if (isSignUp) {
-                const { error } = await authClient.signUp.email({ 
-                    email: formData.email, 
-                    password: formData.password, 
-                    name: formData.name 
+                const { error } = await authClient.signUp.email({
+                    email: formData.email,
+                    password: formData.password,
+                    name: formData.name
                 });
                 if (error) throw new Error(error.message);
             } else {
-                const { error } = await authClient.signIn.email({ 
-                    email: formData.email, 
-                    password: formData.password 
+                const { error } = await authClient.signIn.email({
+                    email: formData.email,
+                    password: formData.password
                 });
                 if (error) throw new Error(error.message);
             }
@@ -88,7 +92,7 @@ export const AuthForm = () => {
             <div className='mt-10 sm:mx-auto sm:w-full sm:max-w-[480px]'>
                 <div className='bg-white px-6 py-12 shadow-xl sm:rounded-2xl sm:px-12 border border-slate-100'>
                     <form className='space-y-6' onSubmit={handleSubmit}>
-                        {isSignUp && (
+                        {isSignUp && allowRegistration && (
                             <div>
                                 <Input
                                     label='Full Name'
@@ -100,7 +104,6 @@ export const AuthForm = () => {
                                 {errors.name && <p className='mt-1 text-xs text-red-600'>{errors.name}</p>}
                             </div>
                         )}
-
                         <div>
                             <Input
                                 label='Email address'
@@ -123,6 +126,12 @@ export const AuthForm = () => {
                             {errors.password && <p className='mt-1 text-xs text-red-600'>{errors.password}</p>}
                         </div>
 
+                        {isSignUp && !allowRegistration && (
+                            <div className='rounded-md bg-yellow-50 p-4 text-sm text-yellow-700'>
+                                User registration is currently closed. Please sign in with an existing account.
+                            </div>
+                        )}
+
                         {generalError && (
                             <div className='rounded-md bg-red-50 p-4 text-sm text-red-700'>
                                 {generalError}
@@ -131,33 +140,37 @@ export const AuthForm = () => {
 
                         <div>
                             <Button type='submit' className='w-full' isLoading={loading}>
-                                {isSignUp ? 'Sign Up' : 'Sign In'}
+                                {isSignUp && allowRegistration ? 'Sign Up' : 'Sign In'}
                             </Button>
                         </div>
                     </form>
 
                     <div className='mt-6'>
-                        <div className='relative'>
-                            <div className='absolute inset-0 flex items-center'>
-                                <div className='w-full border-t border-slate-200' />
-                            </div>
-                            <div className='relative flex justify-center text-sm'>
-                                <span className='bg-white px-2 text-slate-500'>Or</span>
-                            </div>
-                        </div>
-                        <div className='mt-6 text-center'>
-                            <button
-                                type='button'
-                                onClick={() => {
-                                    setIsSignUp(!isSignUp);
-                                    setErrors({});
-                                    setGeneralError(null);
-                                }}
-                                className='text-sm font-semibold text-indigo-600 hover:text-indigo-500 focus:outline-none focus:underline'
-                            >
-                                {isSignUp ? 'Already have an account? Sign in' : 'New here? Create an account'}
-                            </button>
-                        </div>
+                        {allowRegistration && (
+                            <>
+                                <div className='relative'>
+                                    <div className='absolute inset-0 flex items-center'>
+                                        <div className='w-full border-t border-slate-200' />
+                                    </div>
+                                    <div className='relative flex justify-center text-sm'>
+                                        <span className='bg-white px-2 text-slate-500'>Or</span>
+                                    </div>
+                                </div>
+                                <div className='mt-6 text-center'>
+                                    <button
+                                        type='button'
+                                        onClick={() => {
+                                            setIsSignUp(!isSignUp);
+                                            setErrors({});
+                                            setGeneralError(null);
+                                        }}
+                                        className='text-sm font-semibold text-indigo-600 hover:text-indigo-500 focus:outline-none focus:underline'
+                                    >
+                                        {isSignUp ? 'Already have an account? Sign in' : 'New here? Create an account'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

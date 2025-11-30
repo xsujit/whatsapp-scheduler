@@ -9,6 +9,7 @@ import { serverSignUpSchema } from './lib/validation.js';
 // 1. Setup local database
 const rawDb = new Database('app.db');
 rawDb.pragma('journal_mode = WAL');
+const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION === 'true';
 
 export const db = new Kysely({
     dialect: new SqliteDialect({
@@ -45,6 +46,12 @@ export const auth = betterAuth({
     hooks: {
         before: createAuthMiddleware(async (ctx) => {
             if (ctx.path === "/sign-up/email") {
+                if (!ALLOW_REGISTRATION) {
+                    throw new APIError("FORBIDDEN", {
+                        message: "User registration is currently closed."
+                    });
+                }
+
                 const result = serverSignUpSchema.safeParse(ctx.body);
 
                 if (!result.success) {

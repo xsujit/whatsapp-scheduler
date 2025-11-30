@@ -26,7 +26,7 @@ const MESSAGE_QUEUE = [];
 let isProcessingQueue = false;
 const SEND_DELAY_MS = 3000;
 const SESSION_PATH = path.join(__dirname, 'baileys_session');
-const TARGET_TIMEZONE = process.env.TIMEZONE_AMS || 'Europe/Amsterdam';
+const TARGET_TIMEZONE = process.env.APP_TIMEZONE;
 const PORT = parseInt(process.env.PORT);
 const SCHEDULE_DAY = parseInt(process.env.SCHEDULE_DAY);
 
@@ -72,6 +72,12 @@ const scheduleApiLimiter = rateLimit({
     message: {
         error: "Too many schedule requests. Please wait 15 minutes before trying again."
     }
+});
+
+app.get('/api/config', (req, res) => {
+    res.json({
+        allowRegistration: process.env.ALLOW_REGISTRATION === 'true'
+    });
 });
 
 app.get('/api/jobs', protectRoute, async (req, res) => {
