@@ -1,6 +1,6 @@
-// server/ecosystem.config.js
+// server/ecosystem.config.cjs
 
-export default {
+module.exports = {
     apps: [{
         name: 'whatsapp-scheduler',
         script: 'server.js',
