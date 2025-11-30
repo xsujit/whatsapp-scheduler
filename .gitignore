@@ -1,6 +1,7 @@
 server/baileys_session
 server/node_modules
 server/.env
+server/config.js
 server/app.db*
 
 client/node_modules
