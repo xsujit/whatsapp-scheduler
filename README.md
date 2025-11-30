@@ -1,6 +1,10 @@
 # whatsapp-scheduler
 Schedule messages on WhatsApp
 
+# Server
+npx @better-auth/cli@latest migrate
+
+
 Project Structure
 ├── .gitignore
 ├── LICENSE

@@ -1,5 +1,5 @@
 {
-	"name": "server",
+	"name": "whatsapp-scheduler-server",
 	"version": "1.0.0",
 	"description": "",
 	"type": "module",

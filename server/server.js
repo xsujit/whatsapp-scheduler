@@ -11,7 +11,7 @@ import { SCHEDULE_CONFIG } from './config.js';
 import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys';
 import qrcode from 'qrcode-terminal';
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
-import { auth, db } from "./auth.js"; // Import 'db' here
+import { auth, db } from "./auth.js";
 
 // ES MODULE PATH SETUP
 const __filename = fileURLToPath(import.meta.url);
@@ -22,14 +22,14 @@ let waSocket = null;
 let isClientReady = false;
 const SESSION_PATH = path.join(__dirname, 'baileys_session');
 const TARGET_TIMEZONE = process.env.TIMEZONE_AMS || 'Europe/Amsterdam';
-const PORT = parseInt(process.env.PORT) || 3001;
-const SCHEDULE_DAY = parseInt(process.env.SCHEDULE_DAY) || 1;
+const PORT = parseInt(process.env.PORT);
+const SCHEDULE_DAY = parseInt(process.env.SCHEDULE_DAY);
 
 function getTargetTimeForTomorrow(hour, minute, targetTimezone) {
     const today = DateTime.now().setZone(targetTimezone);
     const scheduleDay = today.plus({ days: SCHEDULE_DAY });
     const targetLuxonTime = scheduleDay.set({ hour, minute, second: 0, millisecond: 0 });
-    return targetLuxonTime.toJSDate();
+    return targetLuxonTime;
 }
 
 // EXPRESS
@@ -88,12 +88,9 @@ function scheduleJobInMemory(dbId, jobName, scheduleDate, jid, message) {
     schedule.scheduleJob(jobName, scheduleDate, async function () {
         console.log('\n======================================================');
         console.log(`[JOB START: ${jobName}] Triggered at ${new Date().toLocaleString()}`);
-        
         const success = await sendScheduledMessage(jid, message);
-        
         const newStatus = success ? 'COMPLETED' : 'FAILED';
-        
-        // Update DB status
+
         try {
             await db.updateTable('scheduled_messages')
                 .set({ status: newStatus })
@@ -106,7 +103,7 @@ function scheduleJobInMemory(dbId, jobName, scheduleDate, jid, message) {
 
         console.log(`[JOB END: ${jobName}] Finished.`);
         console.log('======================================================\n');
-        this.cancel(); // Cancel the node-schedule job to free memory
+        this.cancel();
     });
 }
 
@@ -115,7 +112,7 @@ function scheduleJobInMemory(dbId, jobName, scheduleDate, jid, message) {
  */
 async function restoreScheduledJobs() {
     console.log('[SCHEDULER] Checking database for pending jobs...');
-    
+
     try {
         const pendingJobs = await db.selectFrom('scheduled_messages')
             .selectAll()
@@ -174,14 +171,19 @@ app.post('/api/schedule', protectRoute, async (req, res) => {
 
     const scheduledTimes = [];
 
-    // Loop through config and schedule
-    for (const [index, config] of SCHEDULE_CONFIG.entries()) {
+    for (const config of SCHEDULE_CONFIG) {
         const { JID, hour, minute } = config;
-        const scheduleTime = getTargetTimeForTomorrow(hour, minute, TARGET_TIMEZONE);
-        const isoTime = scheduleTime.toISOString();
+
+        // 1. Get the target time as a Luxon object in the correct local timezone
+        const scheduleTimeLuxon = getTargetTimeForTomorrow(hour, minute, TARGET_TIMEZONE);
+
+        // 2. Convert to UTC and get the ISO string for database storage
+        const isoTime = scheduleTimeLuxon.toUTC().toISO();
+
+        // 3. Convert the Luxon object back to a standard JS Date for node-schedule
+        const scheduleTimeJSDate = scheduleTimeLuxon.toJSDate();
 
         try {
-            // 1. Insert into Database FIRST (Source of Truth)
             const result = await db.insertInto('scheduled_messages')
                 .values({
                     jid: JID,
@@ -195,17 +197,16 @@ app.post('/api/schedule', protectRoute, async (req, res) => {
             const dbId = result.id;
             const jobName = `Job_${dbId}_${JID}`;
 
-            // 2. Schedule in Memory
-            scheduleJobInMemory(dbId, jobName, scheduleTime, JID, message);
+            scheduleJobInMemory(dbId, jobName, scheduleTimeJSDate, JID, message);
 
             scheduledTimes.push({
                 chat: JID,
-                time: scheduleTime.toLocaleString('en-GB', { timeZone: TARGET_TIMEZONE })
+                time: scheduleTimeLuxon.toFormat('MMM dd, yyyy HH:mm'),
+                timezone: TARGET_TIMEZONE
             });
 
         } catch (err) {
             console.error(`[DB ERROR] Failed to save schedule for ${JID}:`, err);
-            // If DB fails, we probably shouldn't schedule in memory to avoid "phantom" jobs
         }
     }
 
@@ -259,6 +260,21 @@ async function initializeWhatsAppClient() {
 }
 
 // --- SERVER START ---
+
+app.get('/api/jobs', protectRoute, async (req, res) => {
+    try {
+        const jobs = await db.selectFrom('scheduled_messages')
+            .selectAll()
+            .orderBy('created_at', 'desc')
+            .limit(10)
+            .execute();
+
+        res.json({ success: true, jobs });
+    } catch (error) {
+        console.error('[DB ERROR] Failed to fetch jobs:', error);
+        res.status(500).json({ error: 'Failed to fetch job history.' });
+    }
+});
 
 app.listen(PORT, async () => {
     console.log(`\n================ WhatsApp Scheduler ================`);

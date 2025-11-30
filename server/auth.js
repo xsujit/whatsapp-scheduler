@@ -25,7 +25,7 @@ export const db = new Kysely({
             .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
             .addColumn('jid', 'text', (col) => col.notNull())
             .addColumn('content', 'text', (col) => col.notNull())
-            .addColumn('scheduled_at', 'text', (col) => col.notNull()) // ISO String
+            .addColumn('scheduled_at', 'text', (col) => col.notNull())
             .addColumn('status', 'text', (col) => col.notNull()) // PENDING, COMPLETED, FAILED, EXPIRED
             .addColumn('created_at', 'text', (col) => col.defaultTo(sql`CURRENT_TIMESTAMP`))
             .execute();

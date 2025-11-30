@@ -1,12 +1,16 @@
+// client/src/components/Scheduler.jsx
+
 import React, { useState } from "react";
 import { scheduleMessage } from "../services/scheduleService";
 import { Button } from "./Button";
 import { authClient } from "../lib/auth-client";
+import { JobsHistory } from "./JobsHistory"; // <--- NEW IMPORT
 
 export const Scheduler = ({ userEmail }) => {
     const [message, setMessage] = useState("");
     const [isPending, setIsPending] = useState(false);
     const [result, setResult] = useState(null);
+    const [refreshKey, setRefreshKey] = useState(0); // <--- NEW STATE
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -20,12 +24,12 @@ export const Scheduler = ({ userEmail }) => {
 
         if (response.success) {
             setMessage("");
+            setRefreshKey(prev => prev + 1);
         }
     };
 
     const handleSignOut = async () => {
         await authClient.signOut();
-        // In a real app, you might trigger a state update or redirect here
         window.location.reload();
     };
 
@@ -131,6 +135,7 @@ export const Scheduler = ({ userEmail }) => {
                     )}
                 </div>
             </div>
+            <JobsHistory refreshKey={refreshKey} />
         </div>
     );
 };
