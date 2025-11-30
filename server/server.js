@@ -64,6 +64,29 @@ const protectRoute = async (req, res, next) => {
     }
 };
 
+const scheduleApiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each user to 10 requests per 15 minutes
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    keyGenerator: (req) => {
+        if (req.user) {
+            return req.user.id;
+        }
+
+        return ipKeyGenerator(req);
+    },
+    message: {
+        error: "Too many schedule requests. Please wait 15 minutes before trying again."
+    }
+});
+
+app.use(express.static(path.resolve('../client/dist')));
+
+app.get('*', (req, res) => {
+    res.sendFile(path.resolve('../client/dist/index.html'));
+});
+
 async function sendScheduledMessage(targetJid, messageContent) {
     if (!waSocket || waSocket.user?.id === 'default') {
         console.error('[FATAL] WhatsApp client not ready. Message skipped.');
@@ -121,23 +144,6 @@ async function processMessageQueue() {
     isProcessingQueue = false;
     console.log('[QUEUE PROCESSOR] Queue finished.');
 }
-
-const scheduleApiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // Limit each user to 10 requests per 15 minutes
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    keyGenerator: (req) => {
-        if (req.user) {
-            return req.user.id;
-        }
-
-        return ipKeyGenerator(req);
-    },
-    message: {
-        error: "Too many schedule requests. Please wait 15 minutes before trying again."
-    }
-});
 
 function scheduleJobInMemory(dbId, jobName, scheduleDate, jid, message) {
     schedule.scheduleJob(jobName, scheduleDate, async function () {

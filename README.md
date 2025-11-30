@@ -1,6 +1,9 @@
 # whatsapp-scheduler
 Schedule messages on WhatsApp
 
+# Client
+npm run build
+
 # Server
 npx @better-auth/cli@latest migrate
 

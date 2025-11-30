@@ -4,6 +4,7 @@ server/.env
 server/app.db*
 
 client/node_modules
+client/dist
 
 # Logs
 logs
