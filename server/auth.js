@@ -42,7 +42,6 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true,
     },
-    trustedOrigins: ['http://localhost:5173'],
     hooks: {
         before: createAuthMiddleware(async (ctx) => {
             if (ctx.path === "/sign-up/email") {

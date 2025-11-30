@@ -1,7 +1,7 @@
 // client/src/services/scheduleService.js
 
-const API_URL = "http://localhost:3001/api/schedule";
-const JOBS_URL = "http://localhost:3001/api/jobs";
+const API_URL = "/api/schedule";
+const JOBS_URL = "/api/jobs";
 
 export const scheduleMessage = async (message) => {
     if (!message || message.trim() === "") {

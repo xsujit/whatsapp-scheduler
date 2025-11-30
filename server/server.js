@@ -3,7 +3,6 @@
 import path from 'path';
 import schedule from 'node-schedule';
 import express from 'express';
-import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { DateTime } from 'luxon';
 import 'dotenv/config';
@@ -40,12 +39,6 @@ function getTargetTimeForTomorrow(hour, minute, targetTimezone) {
 
 // EXPRESS
 const app = express();
-app.use(cors({
-    origin: 'http://localhost:5173',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-}));
 app.use(express.json());
 app.all('/api/auth/*splat', toNodeHandler(auth));
 
@@ -81,9 +74,103 @@ const scheduleApiLimiter = rateLimit({
     }
 });
 
+app.get('/api/jobs', protectRoute, async (req, res) => {
+    try {
+        const jobs = await db.selectFrom('scheduled_messages')
+            .selectAll()
+            .orderBy('created_at', 'desc')
+            .limit(10)
+            .execute();
+
+        res.json({ success: true, jobs });
+    } catch (error) {
+        console.error('[DB ERROR] Failed to fetch jobs:', error);
+        res.status(500).json({ error: 'Failed to fetch job history.' });
+    }
+});
+
+app.post('/api/schedule', protectRoute, scheduleApiLimiter, async (req, res) => {
+    if (!isClientReady) {
+        return res.status(503).json({
+            error: 'WhatsApp client is still initializing. Please wait a moment.'
+        });
+    }
+
+    // 1. Validate Input with Zod
+    const validation = scheduleRequestSchema.safeParse(req.body);
+
+    if (!validation.success) {
+        return res.status(400).json({
+            error: 'Validation failed',
+            details: validation.error.flatten().fieldErrors
+        });
+    }
+
+    // 2. Extract safe data
+    const { message } = validation.data;
+
+    if (!message) {
+        return res.status(400).json({ error: 'Message content is required.' });
+    }
+
+    const scheduledTimes = [];
+
+    for (const config of SCHEDULE_CONFIG) {
+        const { JID, hour, minute } = config;
+
+        // 1. Get the target time as a Luxon object in the correct local timezone
+        const scheduleTimeLuxon = getTargetTimeForTomorrow(hour, minute, TARGET_TIMEZONE);
+
+        // 2. Convert to UTC and get the ISO string for database storage
+        const isoTime = scheduleTimeLuxon.toUTC().toISO();
+
+        // 3. Convert the Luxon object back to a standard JS Date for node-schedule
+        const scheduleTimeJSDate = scheduleTimeLuxon.toJSDate();
+
+        try {
+            const result = await db.insertInto('scheduled_messages')
+                .values({
+                    jid: JID,
+                    content: message,
+                    scheduled_at: isoTime,
+                    status: 'PENDING'
+                })
+                .returning('id')
+                .executeTakeFirst();
+
+            const dbId = result.id;
+            const jobName = `Job_${dbId}_${JID}`;
+
+            scheduleJobInMemory(dbId, jobName, scheduleTimeJSDate, JID, message);
+
+            scheduledTimes.push({
+                chat: JID,
+                time: scheduleTimeLuxon.toFormat('MMM dd, yyyy HH:mm'),
+                timezone: TARGET_TIMEZONE
+            });
+
+        } catch (err) {
+            console.error(`[DB ERROR] Failed to save schedule for ${JID}:`, err);
+        }
+    }
+
+    const scheduleDayDescription = SCHEDULE_DAY === 0 ? 'today'
+        : (SCHEDULE_DAY === 1 ? 'tomorrow' : `in ${SCHEDULE_DAY} days`);
+
+    res.json({
+        success: true,
+        scheduledFor: scheduledTimes.map(s => ({
+            chat: s.chat,
+            time: s.time,
+            timezone: TARGET_TIMEZONE
+        })),
+        message: `✅ Message scheduled successfully for ${scheduleDayDescription}!`
+    });
+});
+
 app.use(express.static(path.resolve('../client/dist')));
 
-app.get('*', (req, res) => {
+app.get('/*splat', (req, res) => {
     res.sendFile(path.resolve('../client/dist/index.html'));
 });
 
@@ -207,87 +294,6 @@ async function restoreScheduledJobs() {
     }
 }
 
-// --- API ENDPOINT IMPLEMENTATION ---
-
-app.post('/api/schedule', protectRoute, scheduleApiLimiter, async (req, res) => {
-    if (!isClientReady) {
-        return res.status(503).json({
-            error: 'WhatsApp client is still initializing. Please wait a moment.'
-        });
-    }
-
-    // 1. Validate Input with Zod
-    const validation = scheduleRequestSchema.safeParse(req.body);
-
-    if (!validation.success) {
-        return res.status(400).json({
-            error: 'Validation failed',
-            details: validation.error.flatten().fieldErrors
-        });
-    }
-
-    // 2. Extract safe data
-    const { message } = validation.data;
-
-    if (!message) {
-        return res.status(400).json({ error: 'Message content is required.' });
-    }
-
-    const scheduledTimes = [];
-
-    for (const config of SCHEDULE_CONFIG) {
-        const { JID, hour, minute } = config;
-
-        // 1. Get the target time as a Luxon object in the correct local timezone
-        const scheduleTimeLuxon = getTargetTimeForTomorrow(hour, minute, TARGET_TIMEZONE);
-
-        // 2. Convert to UTC and get the ISO string for database storage
-        const isoTime = scheduleTimeLuxon.toUTC().toISO();
-
-        // 3. Convert the Luxon object back to a standard JS Date for node-schedule
-        const scheduleTimeJSDate = scheduleTimeLuxon.toJSDate();
-
-        try {
-            const result = await db.insertInto('scheduled_messages')
-                .values({
-                    jid: JID,
-                    content: message,
-                    scheduled_at: isoTime,
-                    status: 'PENDING'
-                })
-                .returning('id')
-                .executeTakeFirst();
-
-            const dbId = result.id;
-            const jobName = `Job_${dbId}_${JID}`;
-
-            scheduleJobInMemory(dbId, jobName, scheduleTimeJSDate, JID, message);
-
-            scheduledTimes.push({
-                chat: JID,
-                time: scheduleTimeLuxon.toFormat('MMM dd, yyyy HH:mm'),
-                timezone: TARGET_TIMEZONE
-            });
-
-        } catch (err) {
-            console.error(`[DB ERROR] Failed to save schedule for ${JID}:`, err);
-        }
-    }
-
-    const scheduleDayDescription = SCHEDULE_DAY === 0 ? 'today'
-        : (SCHEDULE_DAY === 1 ? 'tomorrow' : `in ${SCHEDULE_DAY} days`);
-
-    res.json({
-        success: true,
-        scheduledFor: scheduledTimes.map(s => ({
-            chat: s.chat,
-            time: s.time,
-            timezone: TARGET_TIMEZONE
-        })),
-        message: `✅ Message scheduled successfully for ${scheduleDayDescription}!`
-    });
-});
-
 async function initializeWhatsAppClient() {
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
@@ -326,21 +332,6 @@ async function initializeWhatsAppClient() {
 }
 
 // --- SERVER START ---
-
-app.get('/api/jobs', protectRoute, async (req, res) => {
-    try {
-        const jobs = await db.selectFrom('scheduled_messages')
-            .selectAll()
-            .orderBy('created_at', 'desc')
-            .limit(10)
-            .execute();
-
-        res.json({ success: true, jobs });
-    } catch (error) {
-        console.error('[DB ERROR] Failed to fetch jobs:', error);
-        res.status(500).json({ error: 'Failed to fetch job history.' });
-    }
-});
 
 app.listen(PORT, async () => {
     console.log(`\n================ WhatsApp Scheduler ================`);
