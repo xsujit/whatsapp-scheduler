@@ -13,7 +13,7 @@ import qrcode from 'qrcode-terminal';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, db } from './auth.js';
 import { scheduleRequestSchema } from './lib/validation.js';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 // ES MODULE PATH SETUP
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +22,9 @@ const __dirname = path.dirname(__filename);
 // CONSTANTS
 let waSocket = null;
 let isClientReady = false;
+const MESSAGE_QUEUE = [];
+let isProcessingQueue = false;
+const SEND_DELAY_MS = 3000;
 const SESSION_PATH = path.join(__dirname, 'baileys_session');
 const TARGET_TIMEZONE = process.env.TIMEZONE_AMS || 'Europe/Amsterdam';
 const PORT = parseInt(process.env.PORT);
@@ -80,32 +83,24 @@ async function sendScheduledMessage(targetJid, messageContent) {
     }
 }
 
-const scheduleApiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // Limit each user to 10 requests per 15 minutes
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    keyGenerator: (req) => {
-        return req.user ? req.user.id : req.ip;
-    },
-    message: {
-        error: "Too many schedule requests. Please wait 15 minutes before trying again."
+async function processMessageQueue() {
+    if (isProcessingQueue || MESSAGE_QUEUE.length === 0) {
+        return;
     }
-});
 
-// --- DATABASE & SCHEDULER HELPERS ---
+    isProcessingQueue = true;
 
-/**
- * Creates the in-memory job for a database entry.
- * Use this when creating new jobs OR restoring old ones.
- */
-function scheduleJobInMemory(dbId, jobName, scheduleDate, jid, message) {
-    schedule.scheduleJob(jobName, scheduleDate, async function () {
-        console.log('\n======================================================');
-        console.log(`[JOB START: ${jobName}] Triggered at ${new Date().toLocaleString()}`);
+    // Process the queue synchronously
+    while (MESSAGE_QUEUE.length > 0) {
+        const { dbId, jobName, scheduleDate, jid, message } = MESSAGE_QUEUE.shift();
+
+        console.log(`[QUEUE PROCESSOR] Executing: ${jobName}`);
+
+        // 1. Send the message (this is the original logic moved here)
         const success = await sendScheduledMessage(jid, message);
         const newStatus = success ? 'COMPLETED' : 'FAILED';
 
+        // 2. Update DB status
         try {
             await db.updateTable('scheduled_messages')
                 .set({ status: newStatus })
@@ -116,7 +111,42 @@ function scheduleJobInMemory(dbId, jobName, scheduleDate, jid, message) {
             console.error(`[DB ERROR] Failed to update job status for ID ${dbId}:`, dbErr);
         }
 
-        console.log(`[JOB END: ${jobName}] Finished.`);
+        // 3. Wait before processing the next item to prevent spamming
+        if (MESSAGE_QUEUE.length > 0) {
+            await new Promise(resolve => setTimeout(resolve, SEND_DELAY_MS));
+        }
+    }
+
+    isProcessingQueue = false;
+    console.log('[QUEUE PROCESSOR] Queue finished.');
+}
+
+const scheduleApiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each user to 10 requests per 15 minutes
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    keyGenerator: (req) => {
+        if (req.user) {
+            return req.user.id;
+        }
+
+        return ipKeyGenerator(req);
+    },
+    message: {
+        error: "Too many schedule requests. Please wait 15 minutes before trying again."
+    }
+});
+
+function scheduleJobInMemory(dbId, jobName, scheduleDate, jid, message) {
+    schedule.scheduleJob(jobName, scheduleDate, async function () {
+        console.log('\n======================================================');
+        console.log(`[JOB START: ${jobName}] Triggered at ${new Date().toLocaleString()}`);
+
+        MESSAGE_QUEUE.push({ dbId, jobName, scheduleDate, jid, message });
+        processMessageQueue();
+
+        console.log(`[JOB END: ${jobName}] Message queued.`);
         console.log('======================================================\n');
         this.cancel();
     });
@@ -218,7 +248,7 @@ app.post('/api/schedule', protectRoute, scheduleApiLimiter, async (req, res) => 
                     scheduled_at: isoTime,
                     status: 'PENDING'
                 })
-                .returning('id') // Get the ID back
+                .returning('id')
                 .executeTakeFirst();
 
             const dbId = result.id;
