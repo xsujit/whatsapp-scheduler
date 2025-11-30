@@ -13,6 +13,7 @@ import qrcode from 'qrcode-terminal';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, db } from './auth.js';
 import { scheduleRequestSchema } from './lib/validation.js';
+import rateLimit from 'express-rate-limit';
 
 // ES MODULE PATH SETUP
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +79,19 @@ async function sendScheduledMessage(targetJid, messageContent) {
         return false;
     }
 }
+
+const scheduleApiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each user to 10 requests per 15 minutes
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    keyGenerator: (req) => {
+        return req.user ? req.user.id : req.ip;
+    },
+    message: {
+        error: "Too many schedule requests. Please wait 15 minutes before trying again."
+    }
+});
 
 // --- DATABASE & SCHEDULER HELPERS ---
 
@@ -158,7 +172,7 @@ async function restoreScheduledJobs() {
 
 // --- API ENDPOINT IMPLEMENTATION ---
 
-app.post('/api/schedule', protectRoute, async (req, res) => {
+app.post('/api/schedule', protectRoute, scheduleApiLimiter, async (req, res) => {
     if (!isClientReady) {
         return res.status(503).json({
             error: 'WhatsApp client is still initializing. Please wait a moment.'
