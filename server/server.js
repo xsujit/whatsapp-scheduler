@@ -10,8 +10,9 @@ import 'dotenv/config';
 import { SCHEDULE_CONFIG } from './config.js';
 import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys';
 import qrcode from 'qrcode-terminal';
-import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
-import { auth, db } from "./auth.js";
+import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
+import { auth, db } from './auth.js';
+import { scheduleRequestSchema } from './lib/validation.js';
 
 // ES MODULE PATH SETUP
 const __filename = fileURLToPath(import.meta.url);
@@ -35,13 +36,13 @@ function getTargetTimeForTomorrow(hour, minute, targetTimezone) {
 // EXPRESS
 const app = express();
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: 'http://localhost:5173',
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
-app.all("/api/auth/*splat", toNodeHandler(auth));
+app.all('/api/auth/*splat', toNodeHandler(auth));
 
 const protectRoute = async (req, res, next) => {
     try {
@@ -49,12 +50,12 @@ const protectRoute = async (req, res, next) => {
             headers: fromNodeHeaders(req.headers)
         });
         if (!session) {
-            return res.status(401).json({ error: "Unauthorized: Please sign in." });
+            return res.status(401).json({ error: 'Unauthorized: Please sign in.' });
         }
         req.user = session.user;
         next();
     } catch (error) {
-        return res.status(500).json({ error: "Auth check failed" });
+        return res.status(500).json({ error: 'Auth check failed' });
     }
 };
 
@@ -64,7 +65,7 @@ async function sendScheduledMessage(targetJid, messageContent) {
         return false;
     }
     if (!targetJid || !targetJid.includes('@')) {
-        console.error(`[ERROR] Invalid JID: "${targetJid}".`);
+        console.error(`[ERROR] Invalid JID: '${targetJid}'.`);
         return false;
     }
 
@@ -163,7 +164,19 @@ app.post('/api/schedule', protectRoute, async (req, res) => {
             error: 'WhatsApp client is still initializing. Please wait a moment.'
         });
     }
-    const { message } = req.body;
+
+    // 1. Validate Input with Zod
+    const validation = scheduleRequestSchema.safeParse(req.body);
+
+    if (!validation.success) {
+        return res.status(400).json({
+            error: 'Validation failed',
+            details: validation.error.flatten().fieldErrors
+        });
+    }
+
+    // 2. Extract safe data
+    const { message } = validation.data;
 
     if (!message) {
         return res.status(400).json({ error: 'Message content is required.' });
@@ -210,8 +223,8 @@ app.post('/api/schedule', protectRoute, async (req, res) => {
         }
     }
 
-    const scheduleDayDescription = SCHEDULE_DAY === 0 ? "today"
-        : (SCHEDULE_DAY === 1 ? "tomorrow" : `in ${SCHEDULE_DAY} days`);
+    const scheduleDayDescription = SCHEDULE_DAY === 0 ? 'today'
+        : (SCHEDULE_DAY === 1 ? 'tomorrow' : `in ${SCHEDULE_DAY} days`);
 
     res.json({
         success: true,

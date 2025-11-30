@@ -1,22 +1,21 @@
 // server/auth.js
 
-import { betterAuth } from "better-auth";
-import Database from "better-sqlite3";
+import { betterAuth } from 'better-auth';
+import Database from 'better-sqlite3';
 import { Kysely, SqliteDialect, sql } from 'kysely';
+import { APIError } from 'better-auth/api';
+import { serverSignUpSchema } from './lib/validation.js';
 
 // 1. Setup local database
-const rawDb = new Database("app.db");
+const rawDb = new Database('app.db');
 rawDb.pragma('journal_mode = WAL');
 
-// 2. Instantiate Kysely
 export const db = new Kysely({
     dialect: new SqliteDialect({
         database: rawDb,
     }),
 });
 
-// 3. Initialize Custom Tables (Schema Migration)
-// We run this immediately to ensure the table exists before the server accepts requests.
 (async () => {
     try {
         await db.schema
@@ -35,14 +34,29 @@ export const db = new Kysely({
     }
 })();
 
-// 4. Configure Better Auth
 export const auth = betterAuth({
     database: {
         db: db,
-        type: "sqlite",
+        type: 'sqlite',
     },
     emailAndPassword: {
         enabled: true,
     },
-    trustedOrigins: ["http://localhost:5173"],
+    trustedOrigins: ['http://localhost:5173'],
+    hooks: {
+        before: [
+            {
+                matcher: (context) => context.path === '/sign-up/email',
+                handler: async (c) => {
+                    const result = serverSignUpSchema.safeParse(c.body);
+                    if (!result.success) {
+                        const errorMessage = result.error.issues.map(i => i.message).join(', ');
+                        throw new APIError('BAD_REQUEST', {
+                            message: `Validation Error: ${errorMessage}`
+                        });
+                    }
+                },
+            },
+        ],
+    },
 });
