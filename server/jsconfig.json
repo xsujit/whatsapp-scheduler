@@ -1,0 +1,31 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "NodeNext",
+        "baseUrl": ".",
+        "paths": {
+            "#config": [
+                "./src/config/index.js"
+            ],
+            "#services/*": [
+                "./src/services/*"
+            ],
+            "#lib/*": [
+                "./src/lib/*"
+            ],
+            "#db": [
+                "./src/db/index.js"
+            ],
+            "#controllers/*": [
+                "./src/controllers/*"
+            ],
+            "#middleware/*": [
+                "./src/middleware/*"
+            ]
+        }
+    },
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
+}

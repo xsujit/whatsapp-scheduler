@@ -3,7 +3,7 @@
 
 param(
     [string]$Path = ".",
-    [string[]]$Exclude = @("node_modules", "baileys_session", ".git", ".next"),
+    [string[]]$Exclude = @("node_modules", "baileys_session", ".git", "dist"),
     [string]$Prefix = ""
 )
 

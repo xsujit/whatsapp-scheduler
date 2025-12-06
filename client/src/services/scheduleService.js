@@ -1,54 +1,58 @@
 // client/src/services/scheduleService.js
 
-const API_URL = "/api/schedule";
-const JOBS_URL = "/api/jobs";
+const API_URL = '/api/schedules';
 
-export const scheduleMessage = async (message) => {
-    if (!message || message.trim() === "") {
-        return { success: false, message: "", error: "Please write a message first." };
-    }
-
+export const createSchedule = async (payload) => {
     try {
         const response = await fetch(API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message }),
-            credentials: "include",
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            return { success: false, message: "", error: data.error || "Server Error" };
+            return { success: false, error: data.error || 'Server Error' };
         }
 
         return {
-            success: data.success,
-            message: data.message,
-            scheduledFor: data.scheduledFor,
+            success: true,
+            message: 'Schedule created successfully!',
+            data
         };
     } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        return { success: false, message: "", error: `❌ Connection failed: ${errorMessage}` };
+        return { success: false, error: `Connection failed: ${err.message}` };
     }
 };
 
-export const getScheduledJobs = async () => {
+export const getSchedules = async () => {
     try {
-        const response = await fetch(JOBS_URL, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-        });
-
+        const response = await fetch(API_URL);
         const data = await response.json();
 
         if (!response.ok) {
-            return { success: false, jobs: [], error: data.error || "Failed to fetch jobs" };
+            return { success: false, data: [], error: data.error };
         }
 
-        return { success: true, jobs: data.jobs };
+        return { success: true, data: data }; 
     } catch (err) {
-        return { success: false, jobs: [], error: "Connection failed" };
+        return { success: false, data: [], error: 'Connection failed' };
+    }
+};
+
+export const deleteSchedule = async (id) => {
+    try {
+        const response = await fetch(`${API_URL}/${id}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            return { success: false, error: 'Failed to delete schedule' };
+        }
+
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
     }
 };

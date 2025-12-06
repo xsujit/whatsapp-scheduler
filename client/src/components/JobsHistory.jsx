@@ -1,120 +1,110 @@
 // client/src/components/JobsHistory.jsx
 
-import React, { useState, useEffect, useCallback } from "react";
-import { getScheduledJobs } from "../services/scheduleService";
+import React, { useState, useEffect, useRef } from 'react';
+import { getSchedules, deleteSchedule } from '../services/scheduleService';
 import { DateTime } from 'luxon';
+import toast from 'react-hot-toast';
+import { StatusBadge } from './common/StatusBadge';
 
-// Helper component for colored status badges
-const StatusBadge = ({ status }) => {
-    const statusClass = {
-        PENDING: "bg-yellow-100 text-yellow-800",
-        COMPLETED: "bg-emerald-100 text-emerald-800",
-        FAILED: "bg-red-100 text-red-800",
-        EXPIRED: "bg-slate-100 text-slate-800",
-    }[status] || "bg-slate-50 text-slate-500";
-    
-    const text = status.charAt(0) + status.slice(1).toLowerCase();
-
-    return (
-        <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium ${statusClass}`}>
-            {text}
-        </span>
-    );
-};
-
-export const JobsHistory = ({ refreshKey }) => {
+export const JobsHistory = () => {
     const [jobs, setJobs] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const mountedRef = useRef(true); // Track mount status
 
-    const fetchJobs = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        
-        const response = await getScheduledJobs();
-        
-        if (response.success) {
-            setJobs(response.jobs);
-        } else {
-            setError(response.error);
+    const fetchJobs = async () => {
+        if (!mountedRef.current) return;
+
+        const res = await getSchedules();
+
+        if (mountedRef.current) {
+            if (res.success) {
+                setJobs(res.data);
+            }
+            setLoading(false);
         }
-        setIsLoading(false);
+    };
+
+    useEffect(() => {
+        mountedRef.current = true;
+        let timeoutId;
+
+        const recursiveFetch = async () => {
+            await fetchJobs();
+            // Only schedule next fetch after previous completes
+            if (mountedRef.current) {
+                timeoutId = setTimeout(recursiveFetch, 10000);
+            }
+        };
+
+        recursiveFetch();
+
+        return () => {
+            mountedRef.current = false;
+            clearTimeout(timeoutId);
+        };
     }, []);
 
-    // Fetch jobs on initial load and whenever refreshKey changes
-    useEffect(() => {
-        fetchJobs();
-    }, [fetchJobs, refreshKey]);
+    const handleDelete = async (id) => {
+        if (!window.confirm('Cancel and delete this schedule?')) return;
 
-    if (isLoading) {
-        return (
-            <div className="flex justify-center items-center p-8">
-                <div className="animate-spin h-6 w-6 border-2 border-indigo-600 border-t-transparent rounded-full mr-3"></div>
-                <p className="text-slate-500">Loading job history...</p>
-            </div>
-        );
-    }
+        const res = await deleteSchedule(id);
+
+        if (res.success) {
+            toast.success('Schedule deleted.');
+            fetchJobs();
+        } else {
+            toast.error(res.error || 'Failed to delete');
+        }
+    };
 
     return (
-        <div className="mt-12">
-            <h3 className="text-xl font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l3 3a1 1 0 001.414-1.414L11 9.586V6z" clipRule="evenodd" />
-                </svg>
-                Scheduled History
-            </h3>
-            
-            {error && (
-                <div className="rounded-lg bg-red-50 p-4 border border-red-100 text-red-700 text-sm mb-4">
-                    Error loading history: {error}
-                </div>
-            )}
+        <div className='space-y-6'>
+            <div className='flex items-center justify-between border-b border-slate-200 pb-4'>
+                <h2 className='text-2xl font-bold text-slate-900'>Scheduled History</h2>
+            </div>
 
-            {!error && jobs.length === 0 ? (
-                <div className="bg-slate-50 p-6 text-center rounded-lg border border-slate-200 text-slate-600">
-                    No scheduled messages found in the database.
-                </div>
+            {loading && jobs.length === 0 ? (
+                <div className='text-center py-12'>Loading...</div>
             ) : (
-                <div className="overflow-x-auto shadow-md sm:rounded-lg">
-                    <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
-                            <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                    Status
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                    Scheduled Time
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                    Recipient (JID)
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                    Message Preview
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-slate-200">
-                            {jobs.map((job) => {
-                                const scheduledDate = DateTime.fromISO(job.scheduled_at);
-                                return (
-                                    <tr key={job.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <StatusBadge status={job.status} />
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-800 font-mono">
-                                            {scheduledDate.toFormat('MMM dd, yyyy HH:mm')}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600 font-medium">
-                                            {job.jid}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-500 max-w-xs truncate">
-                                            {job.content.substring(0, 50)}...
-                                        </td>
+                <div className='bg-white shadow-sm ring-1 ring-slate-900/5 rounded-lg overflow-hidden'>
+                    <div className='overflow-x-auto'>
+                        <table className='min-w-full divide-y divide-slate-200'>
+                            <thead className='bg-slate-50'>
+                                <tr>
+                                    <th className='px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase'>Status</th>
+                                    <th className='px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase'>Scheduled At</th>
+                                    <th className='px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase'>Collection</th>
+                                    <th className='px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase'>Content</th>
+                                    <th className='px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase'>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className='divide-y divide-slate-200 bg-white'>
+                                {jobs.length === 0 ? (
+                                    <tr>
+                                        <td colSpan='5' className='px-6 py-8 text-center text-sm text-slate-500'>No schedules found.</td>
                                     </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
+                                ) : (
+                                    jobs.map((job) => (
+                                        <tr key={job.id} className='hover:bg-slate-50'>
+                                            <td className='px-6 py-4'><StatusBadge status={job.status} /></td>
+                                            <td className='px-6 py-4 text-sm text-slate-600 font-mono'>
+                                                {DateTime.fromISO(job.scheduled_at).toFormat('MMM dd, HH:mm')}
+                                            </td>
+                                            <td className='px-6 py-4 text-sm text-slate-900 font-medium'>
+                                                {job.collection_name || 'Deleted Collection'}
+                                            </td>
+                                            <td className='px-6 py-4 text-sm text-slate-500 max-w-xs truncate'>
+                                                {job.content}
+                                            </td>
+                                            <td className='px-6 py-4 text-right text-sm font-medium'>
+                                                <button onClick={() => handleDelete(job.id)} className='text-red-600 hover:text-red-900'>Delete</button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
         </div>

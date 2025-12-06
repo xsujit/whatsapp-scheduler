@@ -1,0 +1,9 @@
+1. Do not make assumptions about existing code base.
+2. Do not make assumptions about requirements.
+3. Do not immediately generate code. Draft a plan and wait for approval.
+4. Follow coding principles: SOLID and DRY.
+5. Follow React Container/Presentational pattern.
+6. No God Components.
+7. Highlight any code smells and document any necessary tech debt introduced relative to modern technology standards (e.g., performance, accessibility, bundle size).
+8. Maintain high code quality standards.
+9. Code should be maintable and scalable.

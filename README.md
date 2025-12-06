@@ -15,6 +15,7 @@ npm run start
 # Project Structure
 Project Structure
 ├── .gitignore
+├── AI_INSTRUCTIONS. md
 ├── LICENSE
 ├── README.md
 ├── tree-md.ps1
@@ -25,12 +26,6 @@ Project Structure
 │   ├── package-lock.json
 │   ├── README.md
 │   ├── vite.config.js
-│   ├── dist/
-│   │   ├── index.html
-│   │   ├── vite.svg
-│   │   └── assets/
-│   │       ├── index-C194uGD1.css
-│   │       └── index-D5XLFjeI.js
 │   ├── public/
 │   │   └── vite.svg
 │   └── src/
@@ -41,28 +36,71 @@ Project Structure
 │       ├── assets/
 │       │   └── react.svg
 │       ├── components/
+│       │   ├── Admin.jsx
 │       │   ├── AuthForm.jsx
 │       │   ├── Button.jsx
+│       │   ├── CollectionManager.jsx
 │       │   ├── Input.jsx
 │       │   ├── JobsHistory.jsx
-│       │   └── Scheduler.jsx
+│       │   ├── Layout.jsx
+│       │   ├── Scheduler.jsx
+│       │   ├── collections/
+│       │   │   ├── CollectionForm.jsx
+│       │   │   └── CollectionList.jsx
+│       │   └── common/
+│       │       └── StatusBadge.jsx
+│       ├── context/
+│       │   └── CollectionContext.jsx
 │       ├── lib/
 │       │   ├── auth-client.js
 │       │   └── schemas.js
 │       └── services/
+│           ├── collectionService.js
+│           ├── groupService.js
 │           └── scheduleService.js
 └── server/
     ├── .env
     ├── app.db
     ├── app.db-shm
     ├── app.db-wal
-    ├── auth.js
     ├── config.js
     ├── ecosystem.config.cjs
+    ├── jsconfig.json
     ├── nodemon.json
     ├── package.json
     ├── package-lock.json
-    ├── server.js
-    ├── lib/
-    │   ├── logger.js
-    │   └── validation.js
+    └── src/
+        ├── app.js
+        ├── index.js
+        ├── config/
+        │   └── index.js
+        ├── controllers/
+        │   ├── collection.controller.js
+        │   ├── group.controller.js
+        │   └── schedule.controller.js
+        ├── db/
+        │   ├── collection.dao.js
+        │   ├── index.js
+        │   └── schedule.dao.js
+        ├── lib/
+        │   ├── auth.js
+        │   ├── date-utils.js
+        │   ├── logger.js
+        │   ├── validation.js
+        │   └── validation/
+        │       ├── collection.schema.js
+        │       └── schedule.schema.js
+        ├── middleware/
+        │   └── auth.middleware.js
+        ├── routes/
+        │   └── schedule.routes.js
+        ├── services/
+        │   ├── group.service.js
+        │   ├── scheduler.service.js
+        │   └── whatsapp.service.js
+        └── types/
+            └── enums.js
+
+# Upcoming features
+View In memory schedules
+Automated Scheduled Message

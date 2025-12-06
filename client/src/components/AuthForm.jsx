@@ -5,6 +5,7 @@ import { authClient } from '../lib/auth-client';
 import { Button } from './Button';
 import { Input } from './Input';
 import { signUpSchema, signInSchema } from '../lib/schemas';
+import toast from 'react-hot-toast';
 
 export const AuthForm = ({ allowRegistration }) => {
     const [isSignUp, setIsSignUp] = useState(false);
@@ -15,7 +16,6 @@ export const AuthForm = ({ allowRegistration }) => {
     });
 
     const [errors, setErrors] = useState({});
-    const [generalError, setGeneralError] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const handleInputChange = (field, value) => {
@@ -26,10 +26,9 @@ export const AuthForm = ({ allowRegistration }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setErrors({});
-        setGeneralError(null);
 
         if (isSignUp && !allowRegistration) {
-            setGeneralError("User registration is currently closed.");
+            toast.error('User registration is currently closed.', { duration: 4000 });
             return;
         }
 
@@ -50,6 +49,7 @@ export const AuthForm = ({ allowRegistration }) => {
                 fieldErrors[issue.path[0]] = issue.message;
             });
             setErrors(fieldErrors);
+            toast.error('Please check the form for errors.', { duration: 4000 });
             return;
         }
 
@@ -63,16 +63,19 @@ export const AuthForm = ({ allowRegistration }) => {
                     name: formData.name
                 });
                 if (error) throw new Error(error.message);
+                toast.success('Account created successfully!', { duration: 4000 });
             } else {
                 const { error } = await authClient.signIn.email({
                     email: formData.email,
                     password: formData.password
                 });
                 if (error) throw new Error(error.message);
+                toast.success('Welcome back!', { duration: 4000 });
             }
             window.location.reload();
         } catch (err) {
-            setGeneralError(err instanceof Error ? err.message : 'Authentication failed');
+            const errorMsg = err instanceof Error ? err.message : 'Authentication failed';
+            toast.error(errorMsg, { duration: 4000 });
         } finally {
             setLoading(false);
         }
@@ -132,12 +135,6 @@ export const AuthForm = ({ allowRegistration }) => {
                             </div>
                         )}
 
-                        {generalError && (
-                            <div className='rounded-md bg-red-50 p-4 text-sm text-red-700'>
-                                {generalError}
-                            </div>
-                        )}
-
                         <div>
                             <Button type='submit' className='w-full' isLoading={loading}>
                                 {isSignUp && allowRegistration ? 'Sign Up' : 'Sign In'}
@@ -162,7 +159,6 @@ export const AuthForm = ({ allowRegistration }) => {
                                         onClick={() => {
                                             setIsSignUp(!isSignUp);
                                             setErrors({});
-                                            setGeneralError(null);
                                         }}
                                         className='text-sm font-semibold text-indigo-600 hover:text-indigo-500 focus:outline-none focus:underline'
                                     >
