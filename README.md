@@ -95,6 +95,7 @@ Project Structure
         ├── routes/
         │   └── schedule.routes.js
         ├── services/
+        │   ├── collection.service.js
         │   ├── group.service.js
         │   ├── scheduler.service.js
         │   └── whatsapp.service.js

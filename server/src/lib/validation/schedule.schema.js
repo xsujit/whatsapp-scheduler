@@ -1,33 +1,24 @@
 // server/src/lib/validation/schedule.schema.js
 
 import { z } from 'zod';
+import { APIError } from 'better-auth/api';
 
 /**
  * Zod schema for validating a new scheduled message request.
  */
 export const scheduleSchema = z.object({
-    // Must be a valid collection ID
+    // User still selects a collection ID to populate the initial list
     collectionId: z.number({
         required_error: "Collection ID is required.",
         invalid_type_error: "Collection ID must be a number."
     }).int().positive(),
 
-    // The message content
     content: z.string()
         .min(1, { message: "Message content cannot be empty." })
         .max(4096, { message: "Message content exceeds 4096 characters." }),
 
-    // Hour of the day (0-23)
-    hour: z.number({
-        required_error: "Hour is required."
-    }).int().min(0).max(23),
-
-    // Minute of the hour (0-59)
-    minute: z.number({
-        required_error: "Minute is required."
-    }).int()
-        .min(0)
-        .max(59),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
 });
 
 /**

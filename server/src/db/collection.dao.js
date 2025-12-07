@@ -108,6 +108,13 @@ export const collectionDAO = {
         };
     },
 
+    async getCollectionItems(collectionId) {
+        return await db.selectFrom('collection_items')
+            .where('collection_id', '=', collectionId)
+            .select('group_jid')
+            .execute();
+    },
+
     /**
      * Deletes a collection and its associated group mappings (cascaded by FK).
      * @param {number} id - Collection ID

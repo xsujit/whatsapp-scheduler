@@ -2,6 +2,7 @@
 
 import { APIError } from 'better-auth/api';
 import { scheduleDAO } from '#db/schedule.dao';
+import {collectionService } from '#services/collection.service'
 import { validateScheduleData } from '#lib/validation/schedule.schema';
 import { getTargetTime } from '#lib/date-utils';
 import { schedulerService } from '#services/scheduler.service';
@@ -14,20 +15,28 @@ export const createSchedule = async (req, res) => {
     try {
         const { collectionId, content, hour, minute } = validateScheduleData(req.body);
         const userId = req.user.id;
-
-        // 1. Determine the exact target date and time
         const targetDateTime = getTargetTime(hour, minute);
+        const groupJids = collectionService.getGroupJids(collectionId);
 
-        // 2. Save the schedule to the database
-        const newSchedule = await scheduleDAO.createSchedule(
-            collectionId, 
-            content, 
+        if (groupJids.length === 0) {
+            return res.status(400).json({ error: "The selected collection is empty." });
+        }
+
+        // 2. CREATE (Header + Items)
+        const newSchedule = await scheduleDAO.createScheduleWithItems(
+            content,
             targetDateTime,
-            userId
+            userId,
+            groupJids
         );
 
-        // 3. Immediately schedule the job
-        schedulerService.scheduleNewJob(newSchedule);
+        // 3. QUEUE JOB
+        // We pass the new ID and formatted time to the scheduler
+        schedulerService.scheduleNewJob({
+            id: newSchedule.id,
+            scheduled_at: targetDateTime,
+            content: content
+        });
 
         res.status(201).json(newSchedule);
 
@@ -62,18 +71,13 @@ export const getSchedules = async (req, res) => {
 export const deleteSchedule = async (req, res) => {
     try {
         const id = parseInt(req.params.id, 10);
-        if (isNaN(id)) {
-            return res.status(400).json({ error: 'Invalid schedule ID.' });
-        }
-        
-        // 1. Cancel the in-memory job
+        if (isNaN(id)) return res.status(400)
+            .json({ error: 'Invalid schedule ID.' });
+
         schedulerService.cancelJob(id);
-
-        // 2. Delete the record from the database
         await scheduleDAO.deleteSchedule(id);
-        
-        res.status(204).send(); // 204 No Content for successful deletion
 
+        res.status(204).send();
     } catch (error) {
         console.error('[Controller] Failed to delete schedule:', error);
         res.status(500).json({ error: 'Failed to delete schedule.' });
