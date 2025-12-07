@@ -1,10 +1,6 @@
-// src/types/enums.js
+// server/src/types/enums.js
 
-/**
- * @file Contains all central constant values used across the application.
- */
-
-// 1. WhatsApp Message Statuses
+// WhatsApp Message Statuses
 export const MESSAGE_STATUS = {
     PENDING: 'PENDING',
     IN_PROGRESS: 'IN_PROGRESS',
@@ -14,5 +10,12 @@ export const MESSAGE_STATUS = {
     SENT: 'SENT',
 };
 
-// 2. A simple array useful for the database CHECK constraint definition
 export const MESSAGE_STATUS_VALUES = Object.values(MESSAGE_STATUS);
+
+// Enum for Recurrence
+export const RECURRENCE_TYPE = {
+    ONCE: 'ONCE',
+    DAILY: 'DAILY',
+};
+
+export const RECURRENCE_TYPE_VALUES = Object.values(RECURRENCE_TYPE);

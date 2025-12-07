@@ -21,13 +21,31 @@ export async function initializeSchema() {
         await db.transaction().execute(async (trx) => {
             console.log('[DB] Checking Schema...');
 
-            // --- 1. Scheduled Messages (HEADER) ---
-            // Stores "What" (content) and "When" (time), but not "Who" or "Status"
+            // DROP TABLES if requested (Clean Slate Strategy)
             if (process.env.DROP_SCHEDULED_MESSAGES === 'true') {
-                 await trx.schema.dropTable('scheduled_message_items').ifExists().execute();
-                 await trx.schema.dropTable('scheduled_messages').ifExists().execute();
+                console.warn('[DB] Dropping Schedule Tables...');
+                await trx.schema.dropTable('scheduled_message_items').ifExists().execute();
+                await trx.schema.dropTable('scheduled_messages').ifExists().execute();
+                await trx.schema.dropTable('schedule_definitions').ifExists().execute();
             }
 
+            // --- 1. Schedule Definitions (THE PARENT / RULE) ---
+            // Stores "I want to send X every day at Y time"
+            await trx.schema
+                .createTable('schedule_definitions')
+                .ifNotExists()
+                .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+                .addColumn('content', 'text', (col) => col.notNull())
+                .addColumn('user_id', 'text', (col) => col.notNull())
+                .addColumn('collection_id', 'integer', (col) => col.notNull().references('collections.id').onDelete('cascade'))
+                .addColumn('hour', 'integer', (col) => col.notNull())
+                .addColumn('minute', 'integer', (col) => col.notNull())
+                .addColumn('is_active', 'integer', (col) => col.defaultTo(1)) // 1 = true, 0 = false
+                .addColumn('created_at', 'text', (col) => col.defaultTo(sql`CURRENT_TIMESTAMP`))
+                .execute();
+
+            // --- 2. Scheduled Messages (THE CHILD / EXECUTION) ---
+            // Stores specific instances of messages to be sent (or already sent)
             await trx.schema
                 .createTable('scheduled_messages')
                 .ifNotExists()
@@ -35,11 +53,13 @@ export async function initializeSchema() {
                 .addColumn('content', 'text', (col) => col.notNull())
                 .addColumn('scheduled_at', 'text', (col) => col.notNull())
                 .addColumn('user_id', 'text', (col) => col.notNull())
+                // Link back to definition (optional, because one-off messages won't have a parent)
+                .addColumn('definition_id', 'integer', (col) => col.references('schedule_definitions.id').onDelete('set null'))
                 .addColumn('created_at', 'text', (col) => col.defaultTo(sql`CURRENT_TIMESTAMP`))
+                .addColumn('deleted_at', 'text')
                 .execute();
 
-            // --- 2. Scheduled Message Items (EXECUTION ROWS) ---
-            // Stores the snapshot of targets at the moment of creation
+            // --- 3. Scheduled Message Items (THE TARGETS) ---
             await trx.schema
                 .createTable('scheduled_message_items')
                 .ifNotExists()
@@ -51,11 +71,12 @@ export async function initializeSchema() {
                     .notNull()
                     .defaultTo(MESSAGE_STATUS.PENDING)
                     .check(sql`status IN (${sql.raw(quotedStatusList)})`))
-                .addColumn('sent_at', 'text') // Nullable, populated on success
-                .addColumn('error_message', 'text') // Nullable, populated on failure
+                .addColumn('sent_at', 'text')
+                .addColumn('error_message', 'text')
+                .addColumn('deleted_at', 'text')
                 .execute();
 
-            // --- 3. Groups & Collections (Existing - No Changes) ---
+            // ... (Groups, Collections, Collection Items schemas remain unchanged) ...
             await trx.schema.createTable('groups').ifNotExists()
                 .addColumn('jid', 'text', (col) => col.primaryKey())
                 .addColumn('name', 'text', (col) => col.notNull())

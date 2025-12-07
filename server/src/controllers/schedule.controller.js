@@ -1,81 +1,112 @@
 // server/src/controllers/schedule.controller.js
-
-import { APIError } from 'better-auth/api';
+import { scheduleService } from '#services/schedule.service';
 import { scheduleDAO } from '#db/schedule.dao';
-import {collectionService } from '#services/collection.service'
 import { validateScheduleData } from '#lib/validation/schedule.schema';
-import { getTargetTime } from '#lib/date-utils';
 import { schedulerService } from '#services/scheduler.service';
 
 /**
  * @route POST /api/schedules
- * @description Creates a new scheduled message and immediately queues the job.
+ * @description Creates either a One-Time or Recurring schedule based on payload type.
  */
 export const createSchedule = async (req, res) => {
     try {
-        const { collectionId, content, hour, minute } = validateScheduleData(req.body);
+        // Validate payload (assumes schema handles 'type', 'hour', 'minute', 'content', 'collectionId')
+        const validated = validateScheduleData(req.body);
         const userId = req.user.id;
-        const targetDateTime = getTargetTime(hour, minute);
-        const groupJids = collectionService.getGroupJids(collectionId);
 
-        if (groupJids.length === 0) {
-            return res.status(400).json({ error: "The selected collection is empty." });
+        let result;
+        if (validated.type === 'DAILY') {
+            result = await scheduleService.createRecurringSchedule(userId, validated);
+        } else {
+            // Default to ONCE if not specified or explicitly ONCE
+            result = await scheduleService.createOneTimeSchedule(userId, validated);
         }
 
-        // 2. CREATE (Header + Items)
-        const newSchedule = await scheduleDAO.createScheduleWithItems(
-            content,
-            targetDateTime,
-            userId,
-            groupJids
-        );
-
-        // 3. QUEUE JOB
-        // We pass the new ID and formatted time to the scheduler
-        schedulerService.scheduleNewJob({
-            id: newSchedule.id,
-            scheduled_at: targetDateTime,
-            content: content
+        res.status(201).json({
+            message: validated.type === 'DAILY' ? 'Recurring schedule created.' : 'Message scheduled.',
+            schedule: result
         });
-
-        res.status(201).json(newSchedule);
-
     } catch (error) {
-        if (error instanceof APIError) {
-            return res.status(error.statusCode).json({ error: error.message });
-        }
-        console.error('[Controller] Failed to create schedule:', error);
-        res.status(500).json({ error: 'Failed to create schedule due to a server error.' });
+        console.error('[Controller] Create Schedule Error:', error);
+        // Handle specific validation errors if your validator throws them
+        const status = error.statusCode || 500;
+        res.status(status).json({ error: error.message || 'Failed to create schedule.' });
     }
 };
 
 /**
+ * @route GET /api/schedules/definitions
+ * @description Fetches all active recurring rules (definitions) for the user.
+ */
+export const getRecurringSchedules = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const definitions = await scheduleDAO.getDefinitionsByUserId(userId);
+        res.json(definitions);
+    } catch (error) {
+        console.error('[Controller] Failed to fetch definitions:', error);
+        res.status(500).json({ error: 'Failed to retrieve recurring schedules.' });
+    }
+};
+
+/**
+ * @route DELETE /api/schedules/definitions/:id
+ * @description Deletes a recurring rule and cancels the cron job.
+ */
+export const deleteRecurringSchedule = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: 'Invalid definition ID.' });
+
+        // 1. Cancel the node-schedule job
+        // Note: Ensure schedulerService handles "RULE_{id}" cancellation
+        schedulerService.cancelJob(id);
+
+        // 2. Deactive the record
+        await scheduleDAO.deactivateDefinition(id);
+
+        res.status(204).send();
+    } catch (error) {
+        console.error('[Controller] Failed to delete definition:', error);
+        res.status(500).json({ error: 'Failed to delete recurring schedule.' });
+    }
+};
+
+// TODO: getSchedules now likely needs to return two lists:
+// 1. Active Definitions (Recurring Rules)
+// 2. Execution History (One Time + Recurring Instances)
+// For now, keep getSchedules returning existing history, and add a new endpoint for definitions if needed.
+
+/**
  * @route GET /api/schedules
- * @description Fetches all scheduled messages for the current user.
+ * @description Fetches execution history (One Time jobs + Instances of Recurring jobs).
  */
 export const getSchedules = async (req, res) => {
     try {
         const userId = req.user.id;
+        // This DAO method returns the 'scheduled_messages' (History/Log)
         const schedules = await scheduleDAO.getSchedulesByUserId(userId);
         res.json(schedules);
     } catch (error) {
         console.error('[Controller] Failed to fetch schedules:', error);
-        res.status(500).json({ error: 'Failed to retrieve schedules.' });
+        res.status(500).json({ error: 'Failed to retrieve schedule history.' });
     }
 };
 
 /**
  * @route DELETE /api/schedules/:id
- * @description Deletes a scheduled message and cancels the running job.
+ * @description Deletes a specific scheduled message (History/Pending One-Time).
  */
-export const deleteSchedule = async (req, res) => {
+export const deactivateSchedule = async (req, res) => {
     try {
         const id = parseInt(req.params.id, 10);
-        if (isNaN(id)) return res.status(400)
-            .json({ error: 'Invalid schedule ID.' });
+        if (isNaN(id)) return res.status(400).json({ error: 'Invalid schedule ID.' });
 
+        // Cancel specific job instance if it's pending
         schedulerService.cancelJob(id);
-        await scheduleDAO.deleteSchedule(id);
+
+        // Remove from history/queue
+        await scheduleDAO.deactivateSchedule(id);
 
         res.status(204).send();
     } catch (error) {

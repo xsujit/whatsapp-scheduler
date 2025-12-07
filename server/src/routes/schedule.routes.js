@@ -39,7 +39,13 @@ router.delete('/collections/:id', protectRoute, collectionController.deleteColle
 
 // --- Schedule Routes ---
 router.post('/schedules', protectRoute, scheduleApiLimiter, scheduleController.createSchedule);
+
+// Recurring Rules (Definitions)
+router.get('/schedules/definitions', protectRoute, scheduleController.getRecurringSchedules);
+router.delete('/schedules/definitions/:id', protectRoute, scheduleController.deleteRecurringSchedule);
+
+// Execution History & Management
 router.get('/schedules', protectRoute, scheduleController.getSchedules);
-router.delete('/schedules/:id', protectRoute, scheduleController.deleteSchedule);
+router.delete('/schedules/:id', protectRoute, scheduleController.deactivateSchedule);
 
 export default router;

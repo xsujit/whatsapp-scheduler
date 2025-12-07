@@ -22,19 +22,61 @@ const mapScheduleToDomain = (row) => {
 
 export const scheduleDAO = {
 
+    // --- DEFINITIONS (Recurring Rules) ---
+
+    async createDefinition({ content, userId, collectionId, hour, minute }) {
+        return await db.insertInto('schedule_definitions')
+            .values({ content, user_id: userId, collection_id: collectionId, hour, minute })
+            .returningAll()
+            .executeTakeFirstOrThrow();
+    },
+
+    async getAllDefinitions() {
+        return await db.selectFrom('schedule_definitions').selectAll().execute();
+    },
+
+    async getDefinitions() {
+        return await db.selectFrom('schedule_definitions')
+            .where('is_active', '=', 1)
+            .selectAll()
+            .execute();
+    },
+
+    async getDefinitionsByUserId(userId) {
+        return await db.selectFrom('schedule_definitions')
+            .where('user_id', '=', userId)
+            .where('is_active', '=', 1)
+            .selectAll()
+            .execute();
+    },
+
+    async deleteDefinition(id) {
+        return await db.deleteFrom('schedule_definitions')
+            .where('id', '=', id)
+            .execute();
+    },
+
+    async deactivateDefinition(id) {
+        return await db.updateTable('schedule_definitions')
+            .set({ is_active: 0 })
+            .where('id', '=', id)
+            .execute();
+    },
+
+    // --- EXECUTIONS (Instances) ---
+
     /**
-     * Creates a schedule header and snapshots the current collection members as items.
-     * Returns: Object with Luxon DateTime dates.
+     * Creates a scheduled execution (Child) and snapshots the current collection members.
      */
-    async createScheduleWithItems(content, scheduledAt, userId, groupJids) {
+    async createScheduleWithItems(content, scheduledAt, userId, groupJids, definitionId = null) {
         return await db.transaction().execute(async (trx) => {
             // 1. Create Header
-            // We convert Luxon -> ISO String for storage
             const result = await trx.insertInto('scheduled_messages')
                 .values({
                     content,
                     scheduled_at: scheduledAt.toUTC().toISO(),
-                    user_id: userId
+                    user_id: userId,
+                    definition_id: definitionId
                 })
                 .returningAll()
                 .executeTakeFirstOrThrow();
@@ -52,8 +94,6 @@ export const scheduleDAO = {
                     .execute();
             }
 
-            // 3. Hydrate and Return
-            // We add the itemCount for convenience, and use the helper to convert dates
             return {
                 ...mapScheduleToDomain(result),
                 itemCount: groupJids.length
@@ -62,33 +102,28 @@ export const scheduleDAO = {
     },
 
     /**
-     * Get schedules with a summary of their items' status.
+     * Get schedules. Ideally, we separate API endpoints for "Rules" vs "History", 
+     * but this method returns the executions.
      */
     async getSchedulesByUserId(userId) {
         const rows = await db.selectFrom('scheduled_messages as sm')
             .where('sm.user_id', '=', userId)
-            .leftJoin('scheduled_message_items as smi', 'smi.scheduled_message_id', 'sm.id')
+            .where('sm.deleted_at', 'is', null)
+            .leftJoin('scheduled_message_items as smi', (join) =>
+                join.onRef('smi.scheduled_message_id', '=', 'sm.id')
+                    .on('smi.deleted_at', 'is', null)
+            )
             .select([
-                'sm.id',
-                'sm.content',
-                'sm.scheduled_at',
-                'sm.created_at',
+                'sm.id', 'sm.content', 'sm.scheduled_at', 'sm.created_at', 'sm.definition_id',
                 db.fn.count('smi.id').as('total_count'),
-                // 4. Use conditional SUM to count specific statuses
                 sql`SUM(CASE WHEN smi.status = ${MESSAGE_STATUS.SENT} THEN 1 ELSE 0 END)`.as('sent_count'),
                 sql`SUM(CASE WHEN smi.status = ${MESSAGE_STATUS.FAILED} THEN 1 ELSE 0 END)`.as('failed_count'),
                 sql`SUM(CASE WHEN smi.status = ${MESSAGE_STATUS.PENDING} THEN 1 ELSE 0 END)`.as('pending_count'),
             ])
-            .groupBy([
-                'sm.id',
-                'sm.content',
-                'sm.scheduled_at',
-                'sm.created_at',
-            ])
+            .groupBy(['sm.id', 'sm.content', 'sm.scheduled_at', 'sm.created_at'])
             .orderBy('sm.scheduled_at', 'desc')
             .execute();
 
-        // Convert all rows to use Luxon
         return rows.map(mapScheduleToDomain);
     },
 
@@ -100,6 +135,7 @@ export const scheduleDAO = {
         const rows = await db.selectFrom('scheduled_message_items')
             .where('scheduled_message_id', '=', scheduleId)
             .where('status', '=', MESSAGE_STATUS.PENDING)
+            .where('deleted_at', 'is', null)
             .selectAll()
             .execute();
 
@@ -133,19 +169,31 @@ export const scheduleDAO = {
                     .select(sql`1`)
                     .whereRef('scheduled_message_id', '=', 'sm.id')
                     .where('status', '=', MESSAGE_STATUS.PENDING)
+                    .where('deleted_at', 'is', null)
             ))
+            .where('sm.deleted_at', 'is', null)
             .selectAll()
             .execute();
 
         return rows.map(mapScheduleToDomain);
     },
 
-    // TODO: Add .addColumn('deleted_at', 'text') to the schema.
-    // Update the deleteSchedule DAO to update ... set deleted_at = CURRENT_TIMESTAMP.
-    // Update the getSchedules DAO to where('deleted_at', 'is', null).
-    async deleteSchedule(id) {
-        return await db.deleteFrom('scheduled_messages')
+    async deactivateSchedule(id) {
+        // Soft delete the scheduled_message
+        const scheduleResult = await db.updateTable('scheduled_messages')
+            .set({ deleted_at: sql`CURRENT_TIMESTAMP` })
             .where('id', '=', id)
+            .executeTakeFirst();
+
+        const itemsResult = await db.updateTable('scheduled_message_items')
+            .set({ deleted_at: sql`CURRENT_TIMESTAMP` })
+            .where('scheduled_message_id', '=', id)
             .execute();
+
+        // Return the number of deleted schedules (should be 1 if found)
+        return {
+            scheduledMessages: scheduleResult,
+            scheduledMessageItems: itemsResult
+        };
     }
 };

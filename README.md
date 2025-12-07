@@ -47,10 +47,19 @@ Project Structure
 │       │   ├── collections/
 │       │   │   ├── CollectionForm.jsx
 │       │   │   └── CollectionList.jsx
-│       │   └── common/
-│       │       └── StatusBadge.jsx
+│       │   ├── common/
+│       │   │   └── StatusBadge.jsx
+│       │   ├── History/
+│       │   │   ├── HistoryStats.jsx
+│       │   │   └── HistoryTable.jsx
+│       │   └── Scheduler/
+│       │       ├── RecurringRulesList.jsx
+│       │       └── ScheduleForm.jsx
 │       ├── context/
-│       │   └── CollectionContext.jsx
+│       │   ├── CollectionContext.jsx
+│       │   └── ScheduleContext.jsx
+│       ├── hooks/
+│       │   └── useJobHistory.js
 │       ├── lib/
 │       │   ├── auth-client.js
 │       │   └── schemas.js
@@ -97,6 +106,7 @@ Project Structure
         ├── services/
         │   ├── collection.service.js
         │   ├── group.service.js
+        │   ├── schedule.service.js
         │   ├── scheduler.service.js
         │   └── whatsapp.service.js
         └── types/
