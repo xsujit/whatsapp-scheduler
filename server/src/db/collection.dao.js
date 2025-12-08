@@ -63,13 +63,13 @@ export const collectionDAO = {
      */
     async getAllCollectionsSummary() {
         // SQL to count groups per collection
-        const groupCount = db.selectFrom('collection_items')
+        const itemCount = db.selectFrom('collection_items')
             .select(({ fn }) => fn.count('group_jid').as('item_count'))
             .whereRef('collection_id', '=', 'collections.id')
-            .as('groupCount');
+            .as('item_count');
 
         const rows = await db.selectFrom('collections')
-            .select(['id', 'name', 'created_at', groupCount])
+            .select(['id', 'name', 'created_at', itemCount])
             .orderBy('name', 'asc')
             .execute();
 

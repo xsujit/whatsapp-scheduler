@@ -1,8 +1,10 @@
 // server/src/controllers/schedule.controller.js
+
 import { scheduleService } from '#services/schedule.service';
 import { scheduleDAO } from '#db/schedule.dao';
 import { validateScheduleData } from '#lib/validation/schedule.schema';
 import { schedulerService } from '#services/scheduler.service';
+import { RECURRENCE_TYPE } from '#types/enums'
 
 /**
  * @route POST /api/schedules
@@ -10,20 +12,21 @@ import { schedulerService } from '#services/scheduler.service';
  */
 export const createSchedule = async (req, res) => {
     try {
-        // Validate payload (assumes schema handles 'type', 'hour', 'minute', 'content', 'collectionId')
         const validated = validateScheduleData(req.body);
         const userId = req.user.id;
 
         let result;
-        if (validated.type === 'DAILY') {
+        if (validated.type === RECURRENCE_TYPE.DAILY) {
             result = await scheduleService.createRecurringSchedule(userId, validated);
         } else {
             // Default to ONCE if not specified or explicitly ONCE
             result = await scheduleService.createOneTimeSchedule(userId, validated);
         }
 
+        const message = validated.type === RECURRENCE_TYPE.DAILY ? 'Recurring schedule created.' : 'Message scheduled.';
+
         res.status(201).json({
-            message: validated.type === 'DAILY' ? 'Recurring schedule created.' : 'Message scheduled.',
+            message,
             schedule: result
         });
     } catch (error) {
@@ -72,10 +75,34 @@ export const deleteRecurringSchedule = async (req, res) => {
     }
 };
 
-// TODO: getSchedules now likely needs to return two lists:
-// 1. Active Definitions (Recurring Rules)
-// 2. Execution History (One Time + Recurring Instances)
-// For now, keep getSchedules returning existing history, and add a new endpoint for definitions if needed.
+// TODO: Deprecate getSchedules and getRecurringSchedules, use getSchedulesOverview instead
+
+/**
+ * @route GET /api/schedules/overview
+ * @description Fetches a consolidated view of active recurring rules (Definitions) 
+ * and the execution history (Scheduled Messages/Instances).
+ */
+export const getSchedulesOverview = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Fetch both sets of data in parallel for performance
+        const [activeRules, executionHistory] = await Promise.all([
+            // 1. Active Rules (The recurring definitions)
+            scheduleDAO.getDefinitionsByUserId(userId),
+            // 2. Execution History (The one-time and recurring instances)
+            scheduleDAO.getSchedulesByUserId(userId)
+        ]);
+
+        res.json({
+            activeRules,
+            executionHistory
+        });
+    } catch (error) {
+        console.error('[Controller] Failed to fetch schedule overview:', error);
+        res.status(500).json({ error: 'Failed to retrieve schedule data overview.' });
+    }
+};
 
 /**
  * @route GET /api/schedules

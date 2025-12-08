@@ -4,7 +4,7 @@ import app from './app.js';
 import { CONFIG } from '#config';
 import { initializeSchema } from '#db';
 import { whatsappService } from '#services/whatsapp.service';
-import { schedulerService } from '#services/scheduler.service';
+import { scheduleService } from '#services/schedule.service';
 
 async function startServer() {
     try {
@@ -13,7 +13,7 @@ async function startServer() {
 
         console.log('[Startup] Initializing Services...');
         await whatsappService.initialize();
-        await schedulerService.restoreJobs();
+        await scheduleService.restoreSchedules();
 
         app.listen(CONFIG.PORT, () => {
             console.log(`\n================ WhatsApp Scheduler ================`);

@@ -24,7 +24,6 @@ Project Structure
 │   ├── index.html
 │   ├── package.json
 │   ├── package-lock.json
-│   ├── README.md
 │   ├── vite.config.js
 │   ├── public/
 │   │   └── vite.svg
@@ -70,8 +69,6 @@ Project Structure
 └── server/
     ├── .env
     ├── app.db
-    ├── app.db-shm
-    ├── app.db-wal
     ├── config.js
     ├── ecosystem.config.cjs
     ├── jsconfig.json

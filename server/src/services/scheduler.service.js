@@ -1,141 +1,102 @@
 // server/src/services/scheduler.service.js
 
 import schedule from 'node-schedule';
-import { scheduleDAO } from '#db/schedule.dao';
-import { whatsappService } from '#services/whatsapp.service';
-import { MESSAGE_STATUS } from '#types/enums';
-
-// TODO: FIX Circular dependency (Use dependency injection or direct import)
-import { scheduleService } from './schedule.service.js';
-
-
-const MIN_DELAY_MS = 10000;
-const MAX_DELAY_MS = 20000;
-const getRandomDelay = () => Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1) + MIN_DELAY_MS);
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function executeJob(scheduleItem) {
-    const { id, content } = scheduleItem;
-    console.log(`[Scheduler] Starting Execution for Job #${id}`);
-
-    try {
-        const pendingItems = await scheduleDAO.getPendingItems(id);
-
-        if (pendingItems.length === 0) {
-            console.log(`[Scheduler] Job #${id} has no pending items.`);
-            return;
-        }
-
-        console.log(`[Scheduler] Job #${id} processing ${pendingItems.length} items.`);
-
-        for (const [index, item] of pendingItems.entries()) {
-            const { id: itemId, group_jid } = item;
-
-            try {
-                const { connected } = whatsappService.getStatus();
-                if (!connected) throw new Error('WhatsApp Client disconnected');
-
-                await whatsappService.sendMessage(group_jid, content);
-                await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.SENT);
-            } catch (err) {
-                console.error(`[Scheduler] Failed item ${itemId}:`, err.message);
-                await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.FAILED, err.message);
-            }
-
-            if (index < pendingItems.length - 1) {
-                await wait(getRandomDelay());
-            }
-        }
-
-        console.log(`[Scheduler] Job #${id} execution finished.`);
-    } catch (e) {
-        console.error(`[Scheduler] Job #${id} fatal error:`, e);
-    }
-}
+import { DateTime } from 'luxon';
 
 export const schedulerService = {
+    /**
+     * Schedules a One-Time execution.
+     * @param {string|number} id - Unique identifier for the job
+     * @param {DateTime} targetDateTime - Luxon DateTime object for execution
+     * @param {Function} onTick - The callback function to execute
+     */
+    async scheduleOneTimeJob(id, targetDateTime, onTick) {
+        // Ensure you have a Luxon object (especially important for restore logic)
+        // const target = targetDateTime instanceof DateTime ? targetDateTime : DateTime.fromJSDate(targetDateTime);
+        const target = targetDateTime;
 
-    // --- ONE TIME JOBS ---
-    async scheduleOneTimeJob(scheduleData) {
-        const { id, scheduled_at, content } = scheduleData;
+        // Get the current time in UTC (or application timezone) for comparison
+        const now = DateTime.now().setZone(target.zoneName); // Compare using the same timezone
+
         const jobName = `ONCE_${id}`;
-        const targetTime = scheduled_at.toJSDate();
 
-        if (targetTime < new Date()) {
-            this.triggerImmediateExecution({ id, content });
+        // Safety: Check using Luxon comparison
+        if (target <= now) {
+            console.log(`[Scheduler] Target time for Job #${id} is past. Executing immediately.`);
+            await onTick();
             return;
         }
 
-        schedule.scheduleJob(jobName, targetTime, () => executeJob({ id, content }));
-        console.log(`[Scheduler] One-Time Job #${id} set for ${targetTime.toISOString()}`);
+        // Convert to native Date *only* for node-schedule
+        const targetTimeNative = target.toJSDate();
+
+        // Schedule the job
+        schedule.scheduleJob(jobName, targetTimeNative, async () => {
+            console.log(`[Scheduler] Triggering One-Time Job #${id}`);
+            try {
+                await onTick();
+            } catch (err) {
+                console.error(`[Scheduler] Error inside One-Time Job #${id}:`, err);
+            }
+        });
+
+        console.log(`[Scheduler] One-Time Job #${id} set for ${target.toISO()}`);
     },
 
-    // --- RECURRING RULES ---
-    async scheduleRecurringRule(definition) {
+    /**
+     * Schedules a Recurring Rule.
+     * @param {Object} definition - { id, hour, minute }
+     * @param {Function} onTick - The callback function to execute
+     */
+    async scheduleRecurringRule(definition, onTick) {
         const { id, hour, minute } = definition;
         const jobName = `RULE_${id}`;
 
-        // Create Cron-like Rule
         const rule = new schedule.RecurrenceRule();
         rule.hour = hour;
         rule.minute = minute;
 
-        // Ensure we cancel existing if updating
-        if (schedule.scheduledJobs[jobName]) schedule.scheduledJobs[jobName].cancel();
+        // Cancel existing rule if we are updating it
+        if (schedule.scheduledJobs[jobName]) {
+            schedule.scheduledJobs[jobName].cancel();
+        }
 
-        schedule.scheduleJob(jobName, rule, () => {
-            console.log(`[Scheduler] Rule #${id} triggered.`);
-            // Call Service to generate the child instance
-            scheduleService.instantiateRecurringJob(definition);
+        schedule.scheduleJob(jobName, rule, async () => {
+            console.log(`[Scheduler] Triggering Recurring Rule #${id}`);
+            try {
+                await onTick();
+            } catch (err) {
+                console.error(`[Scheduler] Error inside Rule #${id}:`, err);
+            }
         });
 
         console.log(`[Scheduler] Rule #${id} scheduled for Daily @ ${hour}:${minute}`);
     },
 
-    async triggerImmediateExecution(scheduleData) {
-        executeJob(scheduleData);
-    },
-
-    // --- RESTORATION ---
-    async restoreJobs() {
-        // 1. Restore Pending One-Time Jobs
-        const activeSchedules = await scheduleDAO.getSchedulesWithPendingItems();
-        for (const item of activeSchedules) {
-            await this.scheduleOneTimeJob(item);
-        }
-
-        // 2. Restore Recurring Rules
-        const definitions = await scheduleDAO.getDefinitions();
-        for (const def of definitions) {
-            if (def.is_active) await this.scheduleRecurringRule(def);
-        }
-
-        console.log(`[Scheduler] Restored ${activeSchedules.length} One-Time & ${definitions.length} Recurring jobs.`);
-    },
-
+    /**
+     * Cancel a job (either one-time or recurring)
+     */
     cancelJob(id) {
-        // TODO: This needs to differentiate between ONCE and RULE. 
-        // Ideally pass type or try cancelling both.
-        if (schedule.scheduledJobs[`ONCE_${id}`]) {
-            schedule.scheduledJobs[`ONCE_${id}`].cancel();
-        }
+        const onceName = `ONCE_${id}`;
+        const ruleName = `RULE_${id}`;
 
-        if (schedule.scheduledJobs[`RULE_${id}`]) {
-            schedule.scheduledJobs[`RULE_${id}`].cancel();
+        if (schedule.scheduledJobs[onceName]) {
+            schedule.scheduledJobs[onceName].cancel();
+            console.log(`[Scheduler] Cancelled Job ${onceName}`);
+        }
+        if (schedule.scheduledJobs[ruleName]) {
+            schedule.scheduledJobs[ruleName].cancel();
+            console.log(`[Scheduler] Cancelled Rule ${ruleName}`);
         }
     },
 
     /**
-     * Returns a list of all currently scheduled job IDs and their next invocation.
+     * Diagnostics: Get all active jobs
      */
     getScheduledJobs() {
-        const jobs = [];
-        for (const [name, job] of Object.entries(schedule.scheduledJobs)) {
-            jobs.push({
-                id: name,
-                nextInvocation: job.nextInvocation()
-            });
-        }
-        return jobs;
+        return Object.keys(schedule.scheduledJobs).map(key => ({
+            id: key,
+            nextInvocation: schedule.scheduledJobs[key].nextInvocation()
+        }));
     }
 };

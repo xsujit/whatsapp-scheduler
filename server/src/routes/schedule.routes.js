@@ -46,6 +46,7 @@ router.delete('/schedules/definitions/:id', protectRoute, scheduleController.del
 
 // Execution History & Management
 router.get('/schedules', protectRoute, scheduleController.getSchedules);
+router.get('/schedules/overview', protectRoute, scheduleController.getSchedulesOverview);
 router.delete('/schedules/:id', protectRoute, scheduleController.deactivateSchedule);
 
 export default router;

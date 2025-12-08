@@ -10,7 +10,7 @@ export const ScheduleForm = () => {
     const [type, setType] = useState('ONCE'); // 'ONCE' | 'DAILY'
     const [collectionId, setCollectionId] = useState('');
     const [content, setContent] = useState('');
-    const [hour, setHour] = useState('09');
+    const [hour, setHour] = useState('05');
     const [minute, setMinute] = useState('00');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
