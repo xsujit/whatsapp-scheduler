@@ -91,8 +91,7 @@ export const whatsappService = {
         try {
             // Add a random tiny delay (100-500ms) here for extra safety at the socket level
             await new Promise(r => setTimeout(r, Math.floor(Math.random() * 400) + 100));
-            // await waSocket.sendMessage(jid, { text: content });
-            console.log('sendMessage', content, jid);
+            await waSocket.sendMessage(jid, { text: content });
             return true;
         } catch (error) {
             logger.error(`[WA] Failed to send to ${jid}`, error);
