@@ -3,7 +3,7 @@
 module.exports = {
     apps: [{
         name: 'whatsapp-scheduler',
-        script: 'server.js',
+        script: 'src/index.js',
         interpreter: 'node',
         instances: '1',
         env: {
