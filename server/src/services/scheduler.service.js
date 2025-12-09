@@ -2,35 +2,22 @@
 
 import schedule from 'node-schedule';
 import { DateTime } from 'luxon';
+import { CONFIG } from '#config';
 
 export const schedulerService = {
     /**
-     * Schedules a One-Time execution.
-     * @param {string|number} id - Unique identifier for the job
-     * @param {DateTime} targetDateTime - Luxon DateTime object for execution
+     * Schedules a One-Time execution using a Schedule Domain Object.
+     * @param {Object} scheduleObj - The schedule object containing id and scheduled_at (Luxon DateTime)
+     * @param {string|number} scheduleObj.id - Unique identifier for the job
+     * @param {DateTime} scheduleObj.scheduled_at - Luxon DateTime object for execution
      * @param {Function} onTick - The callback function to execute
      */
-    async scheduleOneTimeJob(id, targetDateTime, onTick) {
-        // Ensure you have a Luxon object (especially important for restore logic)
-        // const target = targetDateTime instanceof DateTime ? targetDateTime : DateTime.fromJSDate(targetDateTime);
-        const target = targetDateTime;
-
-        // Get the current time in UTC (or application timezone) for comparison
-        const now = DateTime.now().setZone(target.zoneName); // Compare using the same timezone
+    async scheduleOneTimeJob(scheduleObj, onTick) {
+        const { id, scheduled_at } = scheduleObj;
 
         const jobName = `ONCE_${id}`;
+        const targetTimeNative = scheduled_at.toJSDate();
 
-        // Safety: Check using Luxon comparison
-        if (target <= now) {
-            console.log(`[Scheduler] Target time for Job #${id} is past. Executing immediately.`);
-            await onTick();
-            return;
-        }
-
-        // Convert to native Date *only* for node-schedule
-        const targetTimeNative = target.toJSDate();
-
-        // Schedule the job
         schedule.scheduleJob(jobName, targetTimeNative, async () => {
             console.log(`[Scheduler] Triggering One-Time Job #${id}`);
             try {
@@ -40,7 +27,7 @@ export const schedulerService = {
             }
         });
 
-        console.log(`[Scheduler] One-Time Job #${id} set for ${target.toISO()}`);
+        console.log(`[Scheduler] One-Time Job #${id} set for ${scheduled_at.toISO()}`);
     },
 
     /**
@@ -55,6 +42,7 @@ export const schedulerService = {
         const rule = new schedule.RecurrenceRule();
         rule.hour = hour;
         rule.minute = minute;
+        rule.tz = CONFIG.TIMEZONE;
 
         // Cancel existing rule if we are updating it
         if (schedule.scheduledJobs[jobName]) {
@@ -70,7 +58,7 @@ export const schedulerService = {
             }
         });
 
-        console.log(`[Scheduler] Rule #${id} scheduled for Daily @ ${hour}:${minute}`);
+        console.log(`[Scheduler] Rule #${id} scheduled for Daily @ ${hour}:${minute} (${CONFIG.TIMEZONE})`);
     },
 
     /**
@@ -84,6 +72,7 @@ export const schedulerService = {
             schedule.scheduledJobs[onceName].cancel();
             console.log(`[Scheduler] Cancelled Job ${onceName}`);
         }
+
         if (schedule.scheduledJobs[ruleName]) {
             schedule.scheduledJobs[ruleName].cancel();
             console.log(`[Scheduler] Cancelled Rule ${ruleName}`);

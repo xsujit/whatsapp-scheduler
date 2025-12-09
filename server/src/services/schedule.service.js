@@ -11,8 +11,8 @@ import { CONFIG } from '#config';
 import { MESSAGE_STATUS } from '#types/enums';
 
 // --- RATE LIMITING CONSTANTS ---
-const MIN_DELAY_MS = 5000;
-const MAX_DELAY_MS = 10000;
+const MIN_DELAY_MS = 6000;
+const MAX_DELAY_MS = 15000;
 
 const getRandomDelay = () => Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1) + MIN_DELAY_MS);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,13 +28,11 @@ const executeBatch = async (header, items) => {
     for (const [index, item] of items.entries()) {
         const { id: itemId, group_jid } = item;
         try {
-            // Check connection status before every message to be safe
             const { connected } = whatsappService.getStatus();
             if (!connected) throw new Error('WhatsApp Client disconnected');
 
             await whatsappService.sendMessage(group_jid, header.content);
             await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.SENT);
-
         } catch (err) {
             console.error(`[Executor] Failed item ${itemId}:`, err.message);
             await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.FAILED, err.message);
@@ -67,8 +65,6 @@ export const scheduleService = {
         // If we were passed only an ID (Future Job), we must fetch data NOW to ensure freshness.
         if (!items || !content) {
             console.log(`[Service] JIT Fetching data for Job #${scheduleId}`);
-
-            // This calls the NEW DAO method implemented above
             const fullContext = await scheduleDAO.getScheduleWithPendingItems(scheduleId);
 
             if (!fullContext) {
@@ -80,7 +76,6 @@ export const scheduleService = {
             content = fullContext.content;
         }
 
-        // 2. Validation
         if (!items || items.length === 0) {
             console.log(`[Service] Job #${scheduleId} has no pending items.`);
             return;
@@ -100,26 +95,19 @@ export const scheduleService = {
             throw new APIError("BAD_REQUEST", { message: "The selected collection is empty." });
         }
 
-        const targetDateTime = getTargetTime(hour, minute);
+        const intendedTime = getTargetTime(hour, minute);
 
-        // 1. Create Data (Header + Items returned immediately)
         const newSchedule = await scheduleDAO.createScheduleWithItems(
             content,
-            targetDateTime,
+            intendedTime,
             userId,
             groupJids,
-            null // No definition ID for one-off
+            null
         );
 
-        // 2. Schedule execution
         schedulerService.scheduleOneTimeJob(
-            newSchedule.id,
-            targetDateTime,
+            newSchedule,
             async () => {
-                // If the job is scheduled for very soon (e.g., < 1 min), we could pass newSchedule.items.
-                // However, to satisfy "Best Options" requirements:
-                // We pass only ID to ensure that if the user edits the schedule between now 
-                // and execution, executeJob fetches the TRUTH.
                 await this.executeJob(newSchedule.id);
             }
         );
@@ -140,8 +128,7 @@ export const scheduleService = {
             content, userId, collectionId, hour, minute
         });
 
-        // 3. Register Rule
-        // We pass a callback that bridges the Scheduler to this Service
+        // The schedulerService now handles the timezone logic using definition inputs
         schedulerService.scheduleRecurringRule(definition, () => {
             this.instantiateRecurringJob(definition);
         });
@@ -156,9 +143,7 @@ export const scheduleService = {
     async instantiateRecurringJob(definition) {
         console.log(`[Service] Instantiating Recurring Job for Rule #${definition.id}`);
         try {
-            // 1. Resolve current collection members (Snapshotting)
             const groupJids = await collectionService.getGroupJids(definition.collection_id);
-
             if (groupJids.length === 0) {
                 console.warn(`[Service] Rule #${definition.id} skipped: Collection empty.`);
                 return;
@@ -166,7 +151,6 @@ export const scheduleService = {
 
             const scheduledDateTime = DateTime.now().setZone(CONFIG.TIMEZONE);
 
-            // 2. Write to DB
             const childSchedule = await scheduleDAO.createScheduleWithItems(
                 definition.content,
                 scheduledDateTime,
@@ -193,9 +177,8 @@ export const scheduleService = {
         const activeSchedules = await scheduleDAO.getSchedulesWithPendingItems();
         for (const item of activeSchedules) {
             schedulerService.scheduleOneTimeJob(
-                item.id,
-                item.scheduled_at,
-                () => this.executeJob(item.id) // Bind ID, fetch data later
+                item,
+                () => this.executeJob(item.id)
             );
         }
 

@@ -14,5 +14,3 @@ export const CONFIG = {
   SESSION_PATH: path.join(__dirname, '../../baileys_session'),
   ALLOW_REGISTRATION: process.env.ALLOW_REGISTRATION === 'true'
 };
-
-export { SCHEDULE_CONFIG } from '../../config.js';

@@ -21,7 +21,6 @@ const mapScheduleToDomain = (row) => {
     };
 };
 
-// NEW: Mapper for Items to handle 'sent_at'
 const mapItemToDomain = (row) => {
     if (!row) return null;
     return {
@@ -29,7 +28,6 @@ const mapItemToDomain = (row) => {
         sent_at: row.sent_at
             ? DateTime.fromISO(row.sent_at, { zone: CONFIG.TIMEZONE })
             : null,
-        // We generally don't map deleted_at for domain logic, but consistent if needed:
         deleted_at: row.deleted_at
             ? DateTime.fromISO(row.deleted_at, { zone: CONFIG.TIMEZONE })
             : null,
@@ -125,7 +123,7 @@ export const scheduleDAO = {
     },
 
     /**
-     * Fetches a header and its pending items, mapping all dates correctly.
+     * Fetches a header and its pending items.
      */
     async getScheduleWithPendingItems(scheduleId) {
         const headerRow = await db.selectFrom('scheduled_messages')
