@@ -8,4 +8,4 @@ General Instructions
 7. Highlight any code smells and document any necessary tech debt introduced relative to modern technology standards (e.g., performance, accessibility, bundle size).
 8. Code should be maintainable and scalable.
 9. Make sure files are separated into appropriate folders.
-10. Luxon date objects should be used thoughout the application except for persistance
+10. Luxon date objects should be used throughout the application except for persistence

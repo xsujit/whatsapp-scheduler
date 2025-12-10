@@ -53,7 +53,7 @@ export const scheduleService = {
     /**
      * CORE ORCHESTRATOR
      * Resolves data and hands it off to the private executeBatch runner.
-     * * @param {string|number} scheduleId - The ID of the schedule to run.
+     * @param {string|number} scheduleId - The ID of the schedule to run.
      * @param {Array|null} preloadedItems - (Optional) Optimization for immediate jobs.
      * @param {string|null} preloadedContent - (Optional) Content if known.
      */
@@ -173,24 +173,46 @@ export const scheduleService = {
      * System Restore on Restart
      */
     async restoreSchedules() {
-        // Restore One-Time Jobs
+        console.log('--- [Service] Starting Schedule Restore Process ---');
+        
+        // 1. Restore One-Time Jobs
         const activeSchedules = await scheduleDAO.getSchedulesWithPendingItems();
+        console.log(`[Service] Found ${activeSchedules.length} One-Time schedules pending in DB.`);
+        
+        const now = DateTime.now().setZone(CONFIG.TIMEZONE);
+
         for (const item of activeSchedules) {
+            const scheduledAt = item.scheduled_at;
+            const diffInMinutes = scheduledAt.diff(now, 'minutes').toObject().minutes;
+            
+            let statusLog = '';
+            if (diffInMinutes < 0) {
+                statusLog = `⚠️  [PAST DUE] Scheduled for ${scheduledAt.toISO()} (${Math.abs(diffInMinutes).toFixed(1)} mins ago). Will trigger immediately!`;
+            } else {
+                statusLog = `✅ [FUTURE] Scheduled for ${scheduledAt.toISO()} (in ${diffInMinutes.toFixed(1)} mins).`;
+            }
+
+            console.log(`[Service] Restoring One-Time Job #${item.id} | ${statusLog}`);
+
             schedulerService.scheduleOneTimeJob(
                 item,
                 () => this.executeJob(item.id)
             );
         }
 
-        // Restore Recurring Rules
+        // 2. Restore Recurring Rules
         const definitions = await scheduleDAO.getDefinitions();
+        console.log(`[Service] Found ${definitions.length} Recurring Rules active in DB.`);
+
         for (const def of definitions) {
             if (def.is_active) {
+                console.log(`[Service] Restoring Recurring Rule #${def.id} | Daily @ ${def.hour}:${def.minute}`);
                 schedulerService.scheduleRecurringRule(def, () => {
                     this.instantiateRecurringJob(def);
                 });
             }
         }
-        console.log(`[Service] Restored ${activeSchedules.length} One-Time & ${definitions.length} Recurring jobs.`);
+        
+        console.log('--- [Service] Schedule Restore Complete ---');
     }
 };
