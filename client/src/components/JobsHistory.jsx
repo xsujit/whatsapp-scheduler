@@ -16,7 +16,7 @@ export const JobsHistory = () => {
     } = useJobHistory();
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6 pb-12">
+        <div className="space-y-6 pb-12"> 
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
                 <div>

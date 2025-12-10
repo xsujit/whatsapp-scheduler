@@ -42,6 +42,7 @@ Project Structure
 │       │   ├── Input.jsx
 │       │   ├── JobsHistory.jsx
 │       │   ├── Layout.jsx
+│       │   ├── Navbar.jsx
 │       │   ├── Scheduler.jsx
 │       │   ├── collections/
 │       │   │   ├── CollectionForm.jsx
@@ -69,7 +70,8 @@ Project Structure
 └── server/
     ├── .env
     ├── app.db
-    ├── config.js
+    ├── app.db-shm
+    ├── app.db-wal
     ├── ecosystem.config.cjs
     ├── jsconfig.json
     ├── nodemon.json

@@ -4,19 +4,13 @@ import React from 'react';
 import { ScheduleProvider } from '../context/ScheduleContext';
 import { ScheduleForm } from './Scheduler/ScheduleForm';
 import { RecurringRulesList } from './Scheduler/RecurringRulesList';
-import { authClient } from '../lib/auth-client';
 
-// Inner component to handle Header/Layout logic
 const SchedulerLayout = () => {
-    const handleSignOut = async () => {
-        await authClient.signOut();
-        window.location.reload();
-    };
-
     return (
+        // This wrapper keeps the content centered and narrow on desktop, which is a design choice.
         <div className='w-full max-w-2xl mx-auto pb-12'>
             <div className='bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100'>
-                {/* Header */}
+
                 <div className='bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-8 text-white'>
                     <div className='flex justify-between items-start'>
                         <div>
@@ -25,9 +19,6 @@ const SchedulerLayout = () => {
                                 Manage single messages or recurring announcements.
                             </p>
                         </div>
-                        <button onClick={handleSignOut} className='text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full backdrop-blur-sm transition-colors'>
-                            Sign Out
-                        </button>
                     </div>
                 </div>
 
@@ -35,8 +26,6 @@ const SchedulerLayout = () => {
                     <ScheduleForm />
                 </div>
             </div>
-
-            {/* Recurring Rules List placed outside the main card for visual separation */}
             <RecurringRulesList />
         </div>
     );
