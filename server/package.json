@@ -29,6 +29,9 @@
 	"author": "Sujit",
 	"license": "ISC",
 	"dependencies": {
+		"@bull-board/api": "^6.15.0",
+		"@bull-board/express": "^6.15.0",
+		"@bull-board/ui": "^6.15.0",
 		"baileys": "^7.0.0-rc.9",
 		"better-auth": "^1.4.6",
 		"better-sqlite3": "^12.5.0",
