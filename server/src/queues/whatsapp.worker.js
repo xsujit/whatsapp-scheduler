@@ -1,9 +1,9 @@
 // server/src/queues/whatsapp.worker.js
 
 import { Worker } from 'bullmq';
-import { redisConnection } from './connection.js';
+import { redisConnection } from '#queues/connection';
 import { MESSAGE_STATUS } from '#types/enums';
-import { QUEUE_NAME } from './whatsapp.queue.js';
+import { QUEUE_NAME } from '#queues/whatsapp.queue';
 import { DateTime } from 'luxon';
 import { CONFIG } from '#config';
 
@@ -71,6 +71,12 @@ export const createWorker = ({ whatsappService, scheduleService, scheduleDAO }) 
             duration: 1000 // Per 1 second (Hardware rate limit safeguard)
         }
     });
+
+    worker.on('active', (job, prev) => console.log(`[Worker] Job ${job.id} is active, previous state ${prev}`));
+
+    worker.on('completed', (job) => console.log(`[Worker] Job ${job.id} has completed!`));
+
+    worker.on('error', (reason) => console.log(`[Worker] Error occurred ${reason}`));
 
     worker.on('failed', (job, err) => console.error(`[Worker] Job ${job.id} Failed: ${err.message}`));
 

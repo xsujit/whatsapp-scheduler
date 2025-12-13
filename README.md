@@ -80,7 +80,9 @@ Project Structure
     ├── package-lock.json
     └── src/
         ├── app.js
-        ├── index.js
+        ├── bin/
+        │   ├── server.js
+        │   └── worker.js
         ├── config/
         │   └── index.js
         ├── controllers/
@@ -95,6 +97,7 @@ Project Structure
         │   ├── auth.js
         │   ├── date-utils.js
         │   ├── logger.js
+        │   ├── status.bridge.js
         │   ├── validation.js
         │   └── validation/
         │       ├── collection.schema.js

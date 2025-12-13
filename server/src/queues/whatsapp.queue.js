@@ -2,7 +2,7 @@
 
 import { Queue, Job } from 'bullmq';
 import { CONFIG } from '#config';
-import { redisConnection } from './connection.js';
+import { redisConnection } from '#queues/connection';
 
 export const QUEUE_NAME = '{whatsapp-message-queue}';
 

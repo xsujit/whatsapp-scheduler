@@ -1,6 +1,6 @@
 // server/src/services/scheduler.service.js
 
-import { queueFacade } from '../queues/whatsapp.queue.js';
+import { queueFacade } from '#queues/whatsapp.queue';
 import { CONFIG } from '#config';
 import { DateTime } from 'luxon';
 

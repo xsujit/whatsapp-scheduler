@@ -1,6 +1,6 @@
 // server/src/queues/connection.js
 
-import IORedis from 'ioredis';
+import { Redis } from 'ioredis';
 
 const connectionOptions = {
     host: process.env.REDIS_HOST || '127.0.0.1', // Localhost for PM2 -> Docker
@@ -8,7 +8,7 @@ const connectionOptions = {
     maxRetriesPerRequest: null, // Critical for BullMQ
 };
 
-export const redisConnection = new IORedis(connectionOptions);
+export const redisConnection = new Redis(connectionOptions);
 
 redisConnection.on('error', (err) => {
     console.error('[Redis] Connection Error:', err);

@@ -5,12 +5,11 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { toNodeHandler } from 'better-auth/node';
-
 import { CONFIG } from '#config';
-import { auth } from './lib/auth.js';
+import { auth } from '#lib/auth';
 import { protectRoute } from '#middleware/auth.middleware';
 import scheduleRoutes from '#routes/schedule.routes';
-import { whatsappService } from '#services/whatsapp.service';
+import { statusBridge } from '#lib/status.bridge';
 
 // PATH SETUP (Relative to src/app.js)
 const __filename = fileURLToPath(import.meta.url);
@@ -33,16 +32,17 @@ app.use(express.json());
 app.all('/api/auth/*splat', toNodeHandler(auth));
 
 // 3. SYSTEM ROUTES
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
     const uptimeSeconds = process.uptime();
     const uptimeString = new Date(uptimeSeconds * 1000).toISOString().substring(11, 19);
-    const waStatus = whatsappService.getStatus();
+
+    const waStatus = await statusBridge.getStatus();
 
     const status = {
         status: 'UP',
         timestamp: new Date().toISOString(),
         uptime: uptimeString,
-        service: 'WhatsApp Scheduler',
+        service: 'WhatsApp Scheduler API',
         whatsapp: {
             connected: waStatus.connected,
             jid: waStatus.connected ? waStatus.jid : 'disconnected'

@@ -1,19 +1,26 @@
-// server/ecosystem.config.cjs
-
 module.exports = {
-    apps: [{
-        name: 'whatsapp-scheduler',
-        script: 'src/index.js',
-        interpreter: 'node',
-        instances: '1',
-        env: {
-            NODE_ENV: 'production',
+    apps: [
+        {
+            name: 'wa-scheduler-api',
+            script: 'src/bin/server.js',
+            interpreter: 'node',
+            instances: 1,
+            env: {
+                NODE_ENV: 'production',
+            },
+            max_memory_restart: '300M',
+            restart_delay: 3000,
         },
-        max_memory_restart: '200M',
-        restart_delay: 5000,
-        watch: false,
-        error_file: 'pm2/err.log',
-        out_file: 'pm2/out.log',
-        log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
-    }]
+        {
+            name: 'wa-scheduler-worker',
+            script: 'src/bin/worker.js',
+            interpreter: 'node',
+            instances: 1,
+            env: {
+                NODE_ENV: 'production',
+            },
+            max_memory_restart: '512M', // Give worker more RAM for image processing/baileys
+            restart_delay: 5000,
+        }
+    ]
 };
