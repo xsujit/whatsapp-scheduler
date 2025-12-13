@@ -14,21 +14,17 @@ export const createSchedule = async (req, res) => {
     try {
         const validated = validateScheduleData(req.body);
         const userId = req.user.id;
-
         let result;
+
         if (validated.type === RECURRENCE_TYPE.DAILY) {
             result = await scheduleService.createRecurringSchedule(userId, validated);
         } else {
-            // Default to ONCE if not specified or explicitly ONCE
-            result = await scheduleService.createOneTimeSchedule(userId, validated);
+            result = await scheduleService.createSchedule(userId, validated);
         }
 
         const message = validated.type === RECURRENCE_TYPE.DAILY ? 'Recurring schedule created.' : 'Message scheduled.';
 
-        res.status(201).json({
-            message,
-            schedule: result
-        });
+        res.status(201).json({ message, schedule: result });
     } catch (error) {
         console.error('[Controller] Create Schedule Error:', error);
         // Handle specific validation errors if your validator throws them
@@ -61,12 +57,10 @@ export const deleteRecurringSchedule = async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (isNaN(id)) return res.status(400).json({ error: 'Invalid definition ID.' });
 
-        // 1. Cancel the node-schedule job
-        // Note: Ensure schedulerService handles "RULE_{id}" cancellation
-        schedulerService.cancelJob(id);
-
-        // 2. Deactive the record
-        await scheduleDAO.deactivateDefinition(id);
+        await Promise.all([
+            schedulerService.cancelRecurringRule(id),
+            scheduleDAO.deactivateDefinition(id)
+        ]);
 
         res.status(204).send();
     } catch (error) {
@@ -88,9 +82,7 @@ export const getSchedulesOverview = async (req, res) => {
 
         // Fetch both sets of data in parallel for performance
         const [activeRules, executionHistory] = await Promise.all([
-            // 1. Active Rules (The recurring definitions)
             scheduleDAO.getDefinitionsByUserId(userId),
-            // 2. Execution History (The one-time and recurring instances)
             scheduleDAO.getSchedulesByUserId(userId)
         ]);
 
@@ -129,11 +121,14 @@ export const deactivateSchedule = async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (isNaN(id)) return res.status(400).json({ error: 'Invalid schedule ID.' });
 
-        // Cancel specific job instance if it's pending
-        schedulerService.cancelJob(id);
+        console.log(`[Controller] Cancelling One-Time Job #${id}`);
 
-        // Remove from history/queue
-        await scheduleDAO.deactivateSchedule(id);
+        const schedule = await scheduleDAO.getScheduleWithPendingItems(id);
+
+        await Promise.all([
+            schedulerService.cancelOneTimeJob(schedule),
+            scheduleDAO.deactivateSchedule(id)
+        ]);
 
         res.status(204).send();
     } catch (error) {

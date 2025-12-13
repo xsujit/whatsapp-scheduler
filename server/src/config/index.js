@@ -12,5 +12,6 @@ export const CONFIG = {
   CLIENT_ORIGIN: process.env.CLIENT_ORIGIN,
   TIMEZONE: process.env.APP_TIMEZONE,
   SESSION_PATH: path.join(__dirname, '../../baileys_session'),
-  ALLOW_REGISTRATION: process.env.ALLOW_REGISTRATION === 'true'
+  ALLOW_REGISTRATION: process.env.ALLOW_REGISTRATION === 'true',
+  DROP_SCHEDULED_MESSAGES: process.env.DROP_SCHEDULED_MESSAGES === 'true',
 };

@@ -3,216 +3,81 @@
 import { scheduleDAO } from '#db/schedule.dao';
 import { collectionService } from '#services/collection.service';
 import { schedulerService } from '#services/scheduler.service';
-import { whatsappService } from '#services/whatsapp.service';
 import { getTargetTime } from '#lib/date-utils';
 import { APIError } from 'better-auth/api';
 import { DateTime } from 'luxon';
 import { CONFIG } from '#config';
-import { MESSAGE_STATUS } from '#types/enums';
-
-// --- RATE LIMITING CONSTANTS ---
-const MIN_DELAY_MS = 6000;
-const MAX_DELAY_MS = 15000;
-
-const getRandomDelay = () => Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1) + MIN_DELAY_MS);
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// --- PRIVATE EXECUTOR ---
-/**
- * Pure execution logic. 
- * Iterates over items, sends messages, handles errors, and enforces delays.
- */
-const executeBatch = async (header, items) => {
-    console.log(`[Executor] Processing Job #${header.id} with ${items.length} items.`);
-
-    for (const [index, item] of items.entries()) {
-        const { id: itemId, group_jid } = item;
-        try {
-            const { connected } = whatsappService.getStatus();
-            if (!connected) throw new Error('WhatsApp Client disconnected');
-
-            await whatsappService.sendMessage(group_jid, header.content);
-            await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.SENT);
-        } catch (err) {
-            console.error(`[Executor] Failed item ${itemId}:`, err.message);
-            await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.FAILED, err.message);
-        }
-
-        // Anti-Ban Delay Logic: Wait if there are more items to process
-        if (index < items.length - 1) {
-            const delay = getRandomDelay();
-            console.log(`[Executor] Waiting ${delay}ms before next message...`);
-            await wait(delay);
-        }
-    }
-    console.log(`[Executor] Job #${header.id} finished.`);
-};
 
 export const scheduleService = {
-
     /**
-     * CORE ORCHESTRATOR
-     * Resolves data and hands it off to the private executeBatch runner.
-     * @param {string|number} scheduleId - The ID of the schedule to run.
-     * @param {Array|null} preloadedItems - (Optional) Optimization for immediate jobs.
-     * @param {string|null} preloadedContent - (Optional) Content if known.
+     * Unified method for creating schedules.
+     * @param {string} userId
+     * @param {object} payload - { collectionId, content, hour, minute }
+     * @param {object} options - Optional overrides
+     * @param {DateTime} [options.forcedTime] - Override the time calculation (for recurring triggers)
+     * @param {number} [options.definitionId] - Link to a recurring definition
      */
-    async executeJob(scheduleId, preloadedItems = null, preloadedContent = null) {
-        let items = preloadedItems;
-        let content = preloadedContent;
-
-        // 1. Data Resolution (JIT Fetch)
-        // If we were passed only an ID (Future Job), we must fetch data NOW to ensure freshness.
-        if (!items || !content) {
-            console.log(`[Service] JIT Fetching data for Job #${scheduleId}`);
-            const fullContext = await scheduleDAO.getScheduleWithPendingItems(scheduleId);
-
-            if (!fullContext) {
-                console.error(`[Service] Job #${scheduleId} not found or deleted.`);
-                return;
-            }
-
-            items = fullContext.items;
-            content = fullContext.content;
-        }
-
-        if (!items || items.length === 0) {
-            console.log(`[Service] Job #${scheduleId} has no pending items.`);
-            return;
-        }
-
-        // 3. Execution
-        // Pass to the private runner (which handles the delays)
-        await executeBatch({ id: scheduleId, content }, items);
-    },
-
-    /**
-     * Creates a ONE-TIME schedule.
-     */
-    async createOneTimeSchedule(userId, { collectionId, content, hour, minute }) {
+    async createSchedule(userId, payload, options = {}) {
+        const { collectionId, content, hour, minute } = payload;
         const groupJids = await collectionService.getGroupJids(collectionId);
+
         if (groupJids.length === 0) {
-            throw new APIError("BAD_REQUEST", { message: "The selected collection is empty." });
+            // If triggered by system, we might log instead of throwing, but for now throw is safe
+            throw new APIError("BAD_REQUEST", { message: "Collection is empty." });
         }
 
-        const intendedTime = getTargetTime(hour, minute);
+        // 1. Determine Time
+        const intendedTime = options.forcedTime ? options.forcedTime : getTargetTime(hour, minute);
 
+        // 2. Persist to DB
         const newSchedule = await scheduleDAO.createScheduleWithItems(
             content,
             intendedTime,
             userId,
             groupJids,
-            null
+            options.definitionId || null
         );
 
-        schedulerService.scheduleOneTimeJob(
-            newSchedule,
-            async () => {
-                await this.executeJob(newSchedule.id);
-            }
-        );
+        // 3. Queue the Items
+        await schedulerService.scheduleOneTimeJobBatch(newSchedule, newSchedule.items);
 
         return newSchedule;
     },
 
-    /**
-     * Creates a RECURRING Rule.
-     */
     async createRecurringSchedule(userId, { collectionId, content, hour, minute }) {
         const groupJids = await collectionService.getGroupJids(collectionId);
         if (groupJids.length === 0) {
-            throw new APIError("BAD_REQUEST", { message: "The selected collection is empty." });
+            throw new APIError("BAD_REQUEST", { message: "Collection is empty." });
         }
 
         const definition = await scheduleDAO.createDefinition({
             content, userId, collectionId, hour, minute
         });
 
-        // The schedulerService now handles the timezone logic using definition inputs
-        schedulerService.scheduleRecurringRule(definition, () => {
-            this.instantiateRecurringJob(definition);
-        });
-
+        await schedulerService.scheduleRecurringRule(definition);
         return definition;
     },
 
-    /**
-     * Instantiates a child job from a rule.
-     * This runs Immediately when triggered by the Scheduler.
-     */
-    async instantiateRecurringJob(definition) {
-        console.log(`[Service] Instantiating Recurring Job for Rule #${definition.id}`);
-        try {
-            const groupJids = await collectionService.getGroupJids(definition.collection_id);
-            if (groupJids.length === 0) {
-                console.warn(`[Service] Rule #${definition.id} skipped: Collection empty.`);
-                return;
-            }
-
-            const scheduledDateTime = DateTime.now().setZone(CONFIG.TIMEZONE);
-
-            const childSchedule = await scheduleDAO.createScheduleWithItems(
-                definition.content,
-                scheduledDateTime,
-                definition.user_id,
-                groupJids,
-                definition.id
-            );
-
-            // 3. Execute Immediately
-            // OPTIMIZATION: Because we *just* created this snapshot milliseconds ago,
-            // we pass the data directly to executeJob to skip the "JIT Fetch" step.
-            await this.executeJob(childSchedule.id, childSchedule.items, childSchedule.content);
-
-        } catch (error) {
-            console.error(`[Service] Failed to instantiate rule #${definition.id}:`, error);
-        }
-    },
+    // --- RESTORE ---
 
     /**
-     * System Restore on Restart
+     * Syncs DB state with BullMQ on startup.
+     * Since BullMQ persists data, we only need to ensure Job Schedulers (Cron) match DB.
      */
     async restoreSchedules() {
-        console.log('--- [Service] Starting Schedule Restore Process ---');
-        
-        // 1. Restore One-Time Jobs
-        const activeSchedules = await scheduleDAO.getSchedulesWithPendingItems();
-        console.log(`[Service] Found ${activeSchedules.length} One-Time schedules pending in DB.`);
-        
-        const now = DateTime.now().setZone(CONFIG.TIMEZONE);
+        console.log('--- [Service] Syncing Job Schedulers ---');
 
-        for (const item of activeSchedules) {
-            const scheduledAt = item.scheduled_at;
-            const diffInMinutes = scheduledAt.diff(now, 'minutes').toObject().minutes;
-            
-            let statusLog = '';
-            if (diffInMinutes < 0) {
-                statusLog = `⚠️  [PAST DUE] Scheduled for ${scheduledAt.toISO()} (${Math.abs(diffInMinutes).toFixed(1)} mins ago). Will trigger immediately!`;
-            } else {
-                statusLog = `✅ [FUTURE] Scheduled for ${scheduledAt.toISO()} (in ${diffInMinutes.toFixed(1)} mins).`;
-            }
-
-            console.log(`[Service] Restoring One-Time Job #${item.id} | ${statusLog}`);
-
-            schedulerService.scheduleOneTimeJob(
-                item,
-                () => this.executeJob(item.id)
-            );
-        }
-
-        // 2. Restore Recurring Rules
+        // 1. Sync Recurring Rules
+        // We re-upsert them to ensure the Queue matches the DB exactly.
         const definitions = await scheduleDAO.getDefinitions();
-        console.log(`[Service] Found ${definitions.length} Recurring Rules active in DB.`);
-
         for (const def of definitions) {
             if (def.is_active) {
-                console.log(`[Service] Restoring Recurring Rule #${def.id} | Daily @ ${def.hour}:${def.minute}`);
-                schedulerService.scheduleRecurringRule(def, () => {
-                    this.instantiateRecurringJob(def);
-                });
+                await schedulerService.scheduleRecurringRule(def);
             }
         }
-        
-        console.log('--- [Service] Schedule Restore Complete ---');
+
+        // Note: We do NOT need to restore One-Time jobs. 
+        // BullMQ/DragonflyDB saved them to disk. They will resume automatically.
+        console.log('--- [Service] Sync Complete ---');
     }
 };

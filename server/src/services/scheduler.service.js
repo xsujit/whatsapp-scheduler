@@ -1,91 +1,110 @@
 // server/src/services/scheduler.service.js
 
-import schedule from 'node-schedule';
-import { DateTime } from 'luxon';
+import { queueFacade } from '../queues/whatsapp.queue.js';
 import { CONFIG } from '#config';
+import { DateTime } from 'luxon';
+
+/**
+ * @typedef {Object} ScheduleHeader
+ * @property {string} id - The ID of the schedule header.
+ * @property {string} content - The message content to be sent.
+ * @property {DateTime} scheduled_at - The target time for the job start (Luxon DateTime object).
+ */
+
+/**
+ * @typedef {Object} ScheduleItem
+ * @property {string} id - The unique ID of the individual message item.
+ * @property {string} group_jid - The JID (Jabber ID) of the target group.
+ */
 
 export const schedulerService = {
     /**
-     * Schedules a One-Time execution using a Schedule Domain Object.
-     * @param {Object} scheduleObj - The schedule object containing id and scheduled_at (Luxon DateTime)
-     * @param {string|number} scheduleObj.id - Unique identifier for the job
-     * @param {DateTime} scheduleObj.scheduled_at - Luxon DateTime object for execution
-     * @param {Function} onTick - The callback function to execute
+     * Queues a batch of messages for a One-Time Job.
+     * Calculates the precise delay for each item to space them out.
+     * * @param {ScheduleHeader} scheduleHeader - { id, content, scheduled_at }
+     * @param {ScheduleItem[]} items - Array of { id, group_jid }
      */
-    async scheduleOneTimeJob(scheduleObj, onTick) {
-        const { id, scheduled_at } = scheduleObj;
+    async scheduleOneTimeJobBatch(scheduleHeader, items) {
+        const { id: scheduleId, scheduled_at: targetTime } = scheduleHeader;
 
-        const jobName = `ONCE_${id}`;
-        const targetTimeNative = scheduled_at.toJSDate();
+        // 1. Calculate Base Start Time
+        const now = DateTime.now().setZone(CONFIG.TIMEZONE);
 
-        schedule.scheduleJob(jobName, targetTimeNative, async () => {
-            console.log(`[Scheduler] Triggering One-Time Job #${id}`);
-            try {
-                await onTick();
-            } catch (err) {
-                console.error(`[Scheduler] Error inside One-Time Job #${id}:`, err);
-            }
-        });
+        // If target is in past, start "now" (plus small buffer)
+        let baseDelayMs = targetTime.diff(now).toObject().milliseconds || 0;
+        if (baseDelayMs < 0) baseDelayMs = 0;
 
-        console.log(`[Scheduler] One-Time Job #${id} set for ${scheduled_at.toISO()}`);
+        console.log(`[Scheduler] Queueing Job #${scheduleId} with ${items.length} items. Starts in ${baseDelayMs}ms`);
+
+        // 2. Queue each item with an incremental delay
+        // Spacing: 10 seconds min, 25 seconds max (Randomized)
+        let accumulatedDelay = baseDelayMs;
+
+        for (const item of items) {
+            // Random spacing to look human
+            const spacing = Math.floor(Math.random() * (25000 - 10000 + 1) + 10000);
+
+            await queueFacade.addMessageJob(
+                `msg_item_${item.id}`, // Unique Job ID
+                {
+                    itemId: item.id,
+                    groupJid: item.group_jid,
+                    content: scheduleHeader.content,
+                    scheduleId: scheduleId
+                },
+                accumulatedDelay
+            );
+
+            accumulatedDelay += spacing;
+        }
     },
 
     /**
-     * Schedules a Recurring Rule.
-     * @param {Object} definition - { id, hour, minute }
-     * @param {Function} onTick - The callback function to execute
+     * Upserts a Recurring Rule using BullMQ Job Schedulers
      */
-    async scheduleRecurringRule(definition, onTick) {
+    async scheduleRecurringRule(definition) {
         const { id, hour, minute } = definition;
-        const jobName = `RULE_${id}`;
+        const cronExpression = `${minute} ${hour} * * *`;
 
-        const rule = new schedule.RecurrenceRule();
-        rule.hour = hour;
-        rule.minute = minute;
-        rule.tz = CONFIG.TIMEZONE;
-
-        // Cancel existing rule if we are updating it
-        if (schedule.scheduledJobs[jobName]) {
-            schedule.scheduledJobs[jobName].cancel();
-        }
-
-        schedule.scheduleJob(jobName, rule, async () => {
-            console.log(`[Scheduler] Triggering Recurring Rule #${id}`);
-            try {
-                await onTick();
-            } catch (err) {
-                console.error(`[Scheduler] Error inside Rule #${id}:`, err);
-            }
+        await queueFacade.upsertRecurringRule(id, cronExpression, {
+            originalTime: `${hour}:${minute}`
         });
 
-        console.log(`[Scheduler] Rule #${id} scheduled for Daily @ ${hour}:${minute} (${CONFIG.TIMEZONE})`);
+        console.log(`[Scheduler] Rule #${id} synced to BullMQ @ ${hour}:${minute}`);
     },
 
     /**
-     * Cancel a job (either one-time or recurring)
+     * Cancels a One-Time Job.
+     * Removes specific pending items from Queue, then updates DB.
      */
-    cancelJob(id) {
-        const onceName = `ONCE_${id}`;
-        const ruleName = `RULE_${id}`;
-
-        if (schedule.scheduledJobs[onceName]) {
-            schedule.scheduledJobs[onceName].cancel();
-            console.log(`[Scheduler] Cancelled Job ${onceName}`);
+    async cancelOneTimeJob(schedule) {
+        if (!schedule) {
+            console.warn(`[Scheduler] Schedule not found or already deleted.`);
+            return;
         }
 
-        if (schedule.scheduledJobs[ruleName]) {
-            schedule.scheduledJobs[ruleName].cancel();
-            console.log(`[Scheduler] Cancelled Rule ${ruleName}`);
-        }
+        const scheduleId = schedule.id;
+
+        console.log(`[Scheduler] Cancelling One-Time Job #${scheduleId}. Removing ${schedule.items.length} pending items...`);
+
+        // 2. Remove each pending item from BullMQ
+        // We execute this in parallel for speed
+        const removalPromises = schedule.items.map(item =>
+            queueFacade.removeJob(`msg_item_${item.id}`)
+        );
+
+        await Promise.all(removalPromises);
+
+        console.log(`[Scheduler] One-Time Job #${scheduleId} cancelled successfully.`);
     },
 
     /**
-     * Diagnostics: Get all active jobs
+     * Cancels a Recurring Rule.
+     * Removes the Scheduler from BullMQ, then updates DB.
      */
-    getScheduledJobs() {
-        return Object.keys(schedule.scheduledJobs).map(key => ({
-            id: key,
-            nextInvocation: schedule.scheduledJobs[key].nextInvocation()
-        }));
+    async cancelRecurringRule(ruleId) {
+        await queueFacade.removeRecurringRule(ruleId);
+
+        console.log(`[Scheduler] Recurring Rule #${ruleId} cancelled successfully.`);
     }
 };

@@ -15,7 +15,7 @@ npm run start
 # Project Structure
 Project Structure
 ├── .gitignore
-├── AI_INSTRUCTIONS. md
+├── AI_INSTRUCTIONS.md
 ├── LICENSE
 ├── README.md
 ├── tree-md.ps1
@@ -72,6 +72,7 @@ Project Structure
     ├── app.db
     ├── app.db-shm
     ├── app.db-wal
+    ├── docker-compose.yml
     ├── ecosystem.config.cjs
     ├── jsconfig.json
     ├── nodemon.json
@@ -100,6 +101,10 @@ Project Structure
         │       └── schedule.schema.js
         ├── middleware/
         │   └── auth.middleware.js
+        ├── queues/
+        │   ├── connection.js
+        │   ├── whatsapp.queue.js
+        │   └── whatsapp.worker.js
         ├── routes/
         │   └── schedule.routes.js
         ├── services/
@@ -110,7 +115,6 @@ Project Structure
         │   └── whatsapp.service.js
         └── types/
             └── enums.js
-
 # Upcoming features
 View In memory schedules
 Automated Scheduled Message
