@@ -5,6 +5,8 @@ import { redisConnection } from '#queues/connection';
 const STATUS_KEY = 'system:whatsapp:status';
 const CACHE_TTL_SECONDS = 60; // Auto-expire if worker dies
 
+const connection = redisConnection.duplicate();
+
 export const statusBridge = {
     /**
      * WORKER SIDE: Publishes the current service status to Redis.
@@ -12,7 +14,7 @@ export const statusBridge = {
      */
     async updateStatus(statusObj) {
         try {
-            await redisConnection.set(
+            await connection.set(
                 STATUS_KEY,
                 JSON.stringify({
                     ...statusObj,
@@ -32,7 +34,7 @@ export const statusBridge = {
      */
     async getStatus() {
         try {
-            const raw = await redisConnection.get(STATUS_KEY);
+            const raw = await connection.get(STATUS_KEY);
             if (!raw) {
                 return { connected: false, jid: 'worker-offline' };
             }
