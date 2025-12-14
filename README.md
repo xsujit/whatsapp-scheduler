@@ -67,6 +67,11 @@ Project Structure
 │           ├── collectionService.js
 │           ├── groupService.js
 │           └── scheduleService.js
+├── docs/
+│   ├── dragonfly-db.md
+│   ├── pm2.md
+│   ├── server.md
+│   └── ssh-setup.md
 └── server/
     ├── .env
     ├── app.db
@@ -88,7 +93,8 @@ Project Structure
         ├── controllers/
         │   ├── collection.controller.js
         │   ├── group.controller.js
-        │   └── schedule.controller.js
+        │   ├── schedule.controller.js
+        │   └── system.controller.js
         ├── db/
         │   ├── collection.dao.js
         │   ├── index.js
@@ -97,6 +103,7 @@ Project Structure
         │   ├── auth.js
         │   ├── date-utils.js
         │   ├── logger.js
+        │   ├── queue-dashboard.js
         │   ├── status.bridge.js
         │   ├── validation.js
         │   └── validation/
@@ -109,7 +116,8 @@ Project Structure
         │   ├── whatsapp.queue.js
         │   └── whatsapp.worker.js
         ├── routes/
-        │   └── schedule.routes.js
+        │   ├── schedule.routes.js
+        │   └── system.routes.js
         ├── services/
         │   ├── collection.service.js
         │   ├── group.service.js
