@@ -21,6 +21,14 @@ export const createWorker = ({ whatsappService, scheduleService, scheduleDAO }) 
             const { itemId, groupJid, content, scheduleId } = data;
 
             console.log(`[Worker] Processing Item #${itemId} (Job #${scheduleId})`);
+
+            const currentItem = await scheduleDAO.getItemById(itemId);
+
+            if (currentItem.status === MESSAGE_STATUS.SENT) {
+                console.warn(`[Worker] Skipped Item #${itemId} - Already SENT`);
+                return;
+            }
+
             try {
                 const { connected } = whatsappService.getStatus();
                 if (!connected) throw new Error('WhatsApp Disconnected');

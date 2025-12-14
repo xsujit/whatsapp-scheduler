@@ -9,6 +9,12 @@ services:
       - "6379:6379"
     volumes:
       - dragonflydata:/data
-    command: ["--cluster_mode=emulated", "--lock_on_hashtags"]
+    command: [
+      "--cluster_mode=emulated", 
+      "--lock_on_hashtags",
+      "--dir=/data",
+      "--dbfilename=dump",
+      "--snapshot_cron=*/5 * * * *"
+    ]
 volumes:
   dragonflydata:

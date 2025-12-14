@@ -1,8 +1,8 @@
 // server/src/db/schedule.dao.js
 
-import { db } from './index.js';
 import { sql } from 'kysely';
 import { DateTime } from 'luxon';
+import { db } from '#db';
 import { CONFIG } from '#config';
 import { MESSAGE_STATUS } from '#types/enums';
 
@@ -167,6 +167,20 @@ export const scheduleDAO = {
             .execute();
 
         return rows.map(mapScheduleToDomain);
+    },
+
+    /**
+     * Fetches a single message item by its primary key ID.
+     * @param {number} itemId - The ID of the item in scheduled_message_items table.
+     * @returns {object | null} The mapped domain object or null.
+     */
+    async getItemById(itemId) {
+        const itemRow = await db.selectFrom('scheduled_message_items')
+            .where('id', '=', itemId)
+            .selectAll()
+            .executeTakeFirst();
+
+        return mapItemToDomain(itemRow);
     },
 
     /**
