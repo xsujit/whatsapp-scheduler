@@ -8,6 +8,14 @@ import { CONFIG } from '#config';
 import { logger } from '#lib/logger';
 import { groupService } from '#services/group.service';
 
+/**
+ * * @typedef {import('baileys').WASocket} WASocket
+ */
+
+/**
+ * Now use the aliased type from the typedef.
+ * @type {WASocket | null}
+ */
 let waSocket = null;
 let isReady = false;
 
@@ -29,10 +37,13 @@ export const whatsappService = {
             logger: logger,
             browser: ['WhatsApp Scheduler', 'Chrome', '1.0.0'],
 
-            // 1. Don't mark as online immediately (stops phone notifications)
+            // Don't mark as online on socket connect
             markOnlineOnConnect: false,
 
-            // 2. Cache Group Metadata to prevent rate-limits/bans
+            // Disabling History Sync
+            shouldSyncHistoryMessage: () => false,
+
+            // Cache Group Metadata to prevent rate-limits/bans
             cachedGroupMetadata: async (jid) => {
                 try {
                     let data = groupCache.get(jid);
@@ -67,7 +78,7 @@ export const whatsappService = {
                 console.error('[WA] Connection closed. Reconnecting...', shouldReconnect);
 
                 if (shouldReconnect) {
-                    setTimeout(() => this.initialize(), 5000);
+                    setTimeout(() => this.initialize(), 10000);
                 }
             } else if (connection === 'open') {
                 isReady = true;
