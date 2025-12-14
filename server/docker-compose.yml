@@ -6,15 +6,16 @@ services:
     ulimits:
       memlock: -1
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - dragonflydata:/data
     command: [
+      "--requirepass=",
       "--cluster_mode=emulated", 
       "--lock_on_hashtags",
       "--dir=/data",
       "--dbfilename=dump",
-      "--snapshot_cron=*/5 * * * *"
+      "--snapshot_cron=0 */6 * * *"
     ]
 volumes:
   dragonflydata:

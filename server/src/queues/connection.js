@@ -1,10 +1,12 @@
 // server/src/queues/connection.js
 
 import { Redis } from 'ioredis';
+import { CONFIG } from '#config';
 
 const connectionOptions = {
-    host: process.env.REDIS_HOST || '127.0.0.1', // Localhost for PM2 -> Docker
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    host: CONFIG.REDIS_HOST,
+    port: CONFIG.REDIS_PORT,
+    password: CONFIG.REDIS_PASSWORD,
     maxRetriesPerRequest: null, // Critical for BullMQ
 };
 
@@ -16,4 +18,8 @@ redisConnection.on('error', (err) => {
 
 redisConnection.on('connect', () => {
     console.log('[Redis] Connected to DragonflyDB');
+});
+
+redisConnection.on('reconnecting', () => {
+    console.log('[Redis] Reconnecting to DragonflyDB');
 });
