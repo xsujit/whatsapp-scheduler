@@ -10,13 +10,13 @@
         "preview": "vite preview"
     },
     "dependencies": {
-        "better-auth": "^1.4.6",
+        "better-auth": "^1.4.7",
         "luxon": "^3.7.2",
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
         "react-hot-toast": "^2.6.0",
         "react-router-dom": "^7.10.1",
-        "zod": "^4.1.13"
+        "zod": "^4.2.0"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.2",
@@ -24,11 +24,11 @@
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.2",
-        "eslint": "^9.39.1",
+        "eslint": "^9.39.2",
         "eslint-plugin-react-hooks": "^7.0.1",
-        "eslint-plugin-react-refresh": "^0.4.24",
+        "eslint-plugin-react-refresh": "^0.4.25",
         "globals": "^16.5.0",
         "tailwindcss": "^4.1.18",
-        "vite": "^7.2.7"
+        "vite": "^7.3.0"
     }
 }
