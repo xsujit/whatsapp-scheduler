@@ -11,7 +11,7 @@ services:
       - dragonflydata:/data
     command: [
       "--requirepass=",
-      "--cluster_mode=emulated", 
+      "--cluster_mode=emulated",
       "--lock_on_hashtags",
       "--dir=/data",
       "--dbfilename=dump",
