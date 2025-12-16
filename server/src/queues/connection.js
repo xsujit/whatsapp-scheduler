@@ -4,7 +4,7 @@ import { Redis } from 'ioredis';
 import { CONFIG } from '#config';
 
 const connectionOptions = {
-    host: CONFIG.REDIS_HOST,
+    host: CONFIG.LOCALHOST,
     port: CONFIG.REDIS_PORT,
     password: CONFIG.REDIS_PASSWORD,
     maxRetriesPerRequest: null, // Critical for BullMQ

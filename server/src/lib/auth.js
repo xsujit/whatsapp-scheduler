@@ -5,7 +5,7 @@ import { APIError, createAuthMiddleware } from 'better-auth/api';
 
 import { db } from '#db';
 import { CONFIG } from '#config';
-import { serverSignUpSchema } from '#lib/validation';
+import { serverSignUpSchema } from '#lib/validation/registration.schema';
 
 export const auth = betterAuth({
     database: {

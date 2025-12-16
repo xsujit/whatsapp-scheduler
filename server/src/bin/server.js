@@ -5,7 +5,7 @@ import { CONFIG } from '#config';
 
 async function startApi() {
     try {
-        const server = app.listen(CONFIG.PORT, () => {
+        const server = app.listen(CONFIG.PORT, CONFIG.LOCALHOST, () => {
             console.log(`\n================ WhatsApp Scheduler API ================`);
             console.log(` Port: ${CONFIG.PORT}`);
             console.log(` Timezone: ${CONFIG.TIMEZONE}`);

@@ -1,4 +1,4 @@
-// server/lib/validation.js
+// server/src/lib/validation/registration.schema.js
 
 import { z } from 'zod';
 
