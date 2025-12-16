@@ -5,7 +5,23 @@ routine server maintenance,
 monitoring, updates, and security checks.
 
 All commands are safe to run on a production server
-when executed carefully.
+
+---
+
+## NPM
+
+### CLIENT
+
+npm i  
+npm run build  
+rm -rf node_modules  
+npm install --omit=dev
+
+### SERVER
+
+npx @better-auth/cli@latest migrate  
+npm install --omit=dev  
+npm run start
 
 ---
 
