@@ -47,19 +47,26 @@ Commands for viewing standard output and error logs from managed applications.
 
 A typical flow for resolving issues and ensuring the application is saved correctly.
 
-1.  **Stop and Delete** the problematic process:
+1. **Stop and Delete** the problematic process:
+
     ```bash
     pm2 delete whatsapp-scheduler
     ```
-2.  **Start** the application again (using the configuration file):
+
+2. **Start** the application again (using the configuration file):
+
     ```bash
     pm2 start ecosystem.config.cjs
     ```
-3.  **Check Logs** to ensure the application is running successfully:
+
+3. **Check Logs** to ensure the application is running successfully:
+
     ```bash
     pm2 logs whatsapp-scheduler
     ```
-4.  Once the application is running successfully, **save** the new process list to ensure it persists across reboots:
+
+4. Once the application is running successfully, **save** the new process list to ensure it persists across reboots:
+
     ```bash
     pm2 save
     ```
