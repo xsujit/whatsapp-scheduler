@@ -2,12 +2,13 @@
 
 import { CONFIG } from '#config';
 import { statusBridge } from '#lib/status.bridge';
+import { asyncHandler } from '#utils/asyncHandler';
 
 /**
  * @route GET /health
  * @description Returns system health, uptime, and WhatsApp connection status.
  */
-export const getHealthStatus = async (req, res) => {
+export const getHealthStatus = asyncHandler(async (req, res) => {
     const uptime = process.uptime();
     const waStatus = await statusBridge.getStatus();
 
@@ -24,7 +25,7 @@ export const getHealthStatus = async (req, res) => {
     };
 
     res.status(200).json(status);
-};
+});
 
 /**
  * @route GET /api/config

@@ -6,6 +6,7 @@ import { MESSAGE_STATUS } from '#types/enums';
 import { QUEUE_NAME } from '#queues/whatsapp.queue';
 import { DateTime } from 'luxon';
 import { CONFIG } from '#config';
+import { logger } from '#lib/logger';
 
 /**
  * Factory Function to create the worker.
@@ -16,16 +17,18 @@ export const createWorker = ({ whatsappService, scheduleService, scheduleDAO }) 
     const worker = new Worker(QUEUE_NAME, async (job) => {
         const { name, data } = job;
 
+        // Child logger for trace-ability
+        const jobLogger = logger.child({ jobId: job.id, jobName: name });
+
         // --- 1. SEND MESSAGE JOB ---
         if (name === 'send-message') {
             const { itemId, groupJid, content, scheduleId } = data;
-
-            console.log(`[Worker] Processing Item #${itemId} (Job #${scheduleId})`);
+            jobLogger.info({ itemId, scheduleId }, '[Worker] Processing Send Message');
 
             const currentItem = await scheduleDAO.getItemById(itemId);
 
             if (currentItem.status === MESSAGE_STATUS.SENT) {
-                console.warn(`[Worker] Skipped Item #${itemId} - Already SENT`);
+                jobLogger.info({ itemId }, '[Worker] Skipping item - Already SENT');
                 return;
             }
 
@@ -35,9 +38,15 @@ export const createWorker = ({ whatsappService, scheduleService, scheduleDAO }) 
 
                 await whatsappService.sendMessage(groupJid, content);
                 await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.SENT);
+
+                jobLogger.info({ itemId }, '[Worker] Message sent successfully');
+
             } catch (err) {
-                console.error(`[Worker] Failed Item #${itemId}:`, err.message);
+                jobLogger.error({ err, itemId }, '[Worker] Send message failed');
+
                 await scheduleDAO.updateItemStatus(itemId, MESSAGE_STATUS.FAILED, err.message);
+
+                // Trigger BullMQ retry
                 throw err;
             }
         }
@@ -45,15 +54,13 @@ export const createWorker = ({ whatsappService, scheduleService, scheduleDAO }) 
         // --- 2. TRIGGER RECURRING RULE ---
         else if (name === 'trigger-rule') {
             const { ruleId } = data;
-            console.log(`[Worker] ⏰ Recurring Rule #${ruleId} Triggered`);
+            jobLogger.info({ ruleId }, '[Worker] Triggering Recurring Rule');
 
-            // Check existence
             const definitions = await scheduleDAO.getDefinitions();
             const rule = definitions.find(d => d.id === ruleId);
 
             if (rule && rule.is_active) {
                 const now = DateTime.now().setZone(CONFIG.TIMEZONE);
-
                 await scheduleService.createSchedule(
                     rule.user_id,
                     {
@@ -68,7 +75,7 @@ export const createWorker = ({ whatsappService, scheduleService, scheduleDAO }) 
                     }
                 );
             } else {
-                console.warn(`[Worker] Rule #${ruleId} triggered but is inactive/deleted.`);
+                jobLogger.warn({ ruleId }, '[Worker] Rule triggered but inactive/deleted');
             }
         }
     }, {
@@ -80,13 +87,29 @@ export const createWorker = ({ whatsappService, scheduleService, scheduleDAO }) 
         }
     });
 
-    worker.on('active', (job, prev) => console.log(`[Worker] Job ${job.id} is active, previous state ${prev}`));
+    // Standardized Worker Event Logging
 
-    worker.on('completed', (job) => console.log(`[Worker] Job ${job.id} has completed!`));
+    worker.on('active', (job, prev) => {
+        logger.debug({ jobId: job.id, name: job.name, prev }, '[Worker] Job Active');
+    });
 
-    worker.on('error', (reason) => console.log(`[Worker] Error occurred ${reason}`));
+    worker.on('completed', (job) => {
+        logger.debug({ jobId: job.id, name: job.name }, '[Worker] Job Completed');
+    });
 
-    worker.on('failed', (job, err) => console.error(`[Worker] Job ${job.id} Failed: ${err.message}`));
+    worker.on('error', (err) => {
+        // This is a specific worker connection error, not a job error
+        logger.error({ err }, '[Worker] Connection Error');
+    });
+
+    worker.on('failed', (job, err) => {
+        logger.error({
+            err,
+            jobId: job?.id,
+            jobName: job?.name,
+            jobData: job?.data
+        }, '[Worker] Job Failed');
+    });
 
     return worker;
 };

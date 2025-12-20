@@ -49,7 +49,9 @@ Project Structure
 │       ├── hooks/
 │       │   └── useJobHistory.js
 │       ├── lib/
+│       │   ├── api.js
 │       │   ├── auth-client.js
+│       │   ├── logger.js
 │       │   └── schemas.js
 │       └── services/
 │           ├── collectionService.js
@@ -57,7 +59,9 @@ Project Structure
 │           └── scheduleService.js
 ├── docs/
 │   ├── dragonfly-db.md
+│   ├── maintainence.md
 │   ├── pm2.md
+│   ├── project-structure.md
 │   ├── server.md
 │   └── ssh-setup.md
 └── server/
@@ -93,12 +97,16 @@ Project Structure
         │   ├── logger.js
         │   ├── queue-dashboard.js
         │   ├── status.bridge.js
-        │   ├── validation.js
+        │   ├── errors/
+        │   │   └── AppError.js
         │   └── validation/
         │       ├── collection.schema.js
+        │       ├── registration.schema.js
         │       └── schedule.schema.js
         ├── middleware/
-        │   └── auth.middleware.js
+        │   ├── auth.middleware.js
+        │   ├── error.middleware.js
+        │   └── requestLogger.js
         ├── queues/
         │   ├── connection.js
         │   ├── whatsapp.queue.js
@@ -112,6 +120,16 @@ Project Structure
         │   ├── schedule.service.js
         │   ├── scheduler.service.js
         │   └── whatsapp.service.js
-        └── types/
-            └── enums.js
+        ├── types/
+        │   └── enums.js
+        └── utils/
+            └── asyncHandler.js
 ```
+
+Controllers: Use asyncHandler and do not manually send error responses.
+
+Middleware: Uses asyncHandler and AppError.
+
+Services: Throw AppError for logic failures (4xx) and standard Error for system failures (5xx).
+
+Global Handler: Catches everything and returns the JSON format the frontend expects.

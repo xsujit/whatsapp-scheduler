@@ -3,7 +3,6 @@
 import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys';
 import NodeCache from 'node-cache';
 import qrcode from 'qrcode-terminal';
-
 import { CONFIG } from '#config';
 import { logger } from '#lib/logger';
 import { groupService } from '#services/group.service';
@@ -28,7 +27,8 @@ export const whatsappService = {
      * Initialize the Baileys Socket
      */
     async initialize() {
-        console.log('[WA] Initializing...');
+        logger.info('[WA] Initializing WhatsApp Service...');
+
         const { state, saveCreds } = await useMultiFileAuthState(CONFIG.SESSION_PATH);
 
         waSocket = makeWASocket({
@@ -66,23 +66,23 @@ export const whatsappService = {
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
-                console.log('\n------------------------------------------------------');
-                console.log('[WA] Action Required: Scan QR Code');
+                logger.info('[WA] Action Required: Scan QR Code');
                 qrcode.generate(qr, { small: true });
-                console.log('------------------------------------------------------\n');
             }
 
             if (connection === 'close') {
                 isReady = false;
                 const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-                console.error('[WA] Connection closed. Reconnecting...', shouldReconnect);
 
-                if (shouldReconnect) {
-                    setTimeout(() => this.initialize(), 10000);
-                }
+                logger.warn({
+                    err: lastDisconnect?.error,
+                    shouldReconnect
+                }, '[WA] WhatsApp Connection Closed');
+
+                if (shouldReconnect) setTimeout(() => this.initialize(), 5000);
             } else if (connection === 'open') {
                 isReady = true;
-                console.log('[WA] Client Connected and Ready.');
+                logger.info({ jid: waSocket?.user?.id }, '[WA] WhatsApp Client Connected');
                 this.syncGroups();
             }
         });
@@ -90,22 +90,24 @@ export const whatsappService = {
 
     /**
      * Send a text message to a specific JID
+     * Throws clear errors for the Worker to catch.
      * @param {string} jid - The WhatsApp ID
      * @param {string} content - The message text
      */
     async sendMessage(jid, content) {
         if (!isReady || !waSocket) {
-            console.warn('[WA] Message skipped. Client not ready.');
-            return false;
+            // Throw Error so the Worker can handle it
+            throw new Error('[WA] Client is not connected/ready.');
         }
 
         try {
-            // Add a random tiny delay (100-500ms) here for extra safety at the socket level
+            // Random jitter to look human
             await new Promise(r => setTimeout(r, Math.floor(Math.random() * 400) + 100));
+
             await waSocket.sendMessage(jid, { text: content });
             return true;
         } catch (error) {
-            logger.error(`[WA] Failed to send to ${jid}`, error);
+            logger.error({ err: error, jid }, '[WA] Failed to send WhatsApp message');
             throw error;
         }
     },
@@ -126,18 +128,12 @@ export const whatsappService = {
     async syncGroups() {
         if (!isReady) return;
         try {
-            console.log('[WA] Fetching groups to sync...');
             const allMetadata = await waSocket.groupFetchAllParticipating();
-
-            // Also populate cache immediately on startup
-            Object.keys(allMetadata).forEach(jid => {
-                groupCache.set(jid, allMetadata[jid]);
-            });
-
+            Object.keys(allMetadata).forEach(jid => groupCache.set(jid, allMetadata[jid]));
             const count = await groupService.syncGroups(allMetadata);
-            console.log(`[WA] Group Sync Complete. ${count} groups up to date in DB.`);
+            logger.info({ count }, '[WA] WhatsApp Groups synced');
         } catch (e) {
-            console.error('[WA] Group sync failed', e);
+            logger.error({ err: e }, '[WA] WhatsApp Group sync failed');
         }
     }
 };

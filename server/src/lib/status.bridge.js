@@ -1,6 +1,7 @@
 // server/src/lib/status.bridge.js
 
 import { redisConnection } from '#queues/connection';
+import { logger } from '#lib/logger';
 
 const STATUS_KEY = 'system:whatsapp:status';
 const CACHE_TTL_SECONDS = 60; // Auto-expire if worker dies
@@ -24,7 +25,7 @@ export const statusBridge = {
                 CACHE_TTL_SECONDS
             );
         } catch (err) {
-            console.error('[StatusBridge] Failed to update status:', err);
+            logger.error({ err, statusObj }, '[StatusBridge] Failed to update status in Redis');
         }
     },
 
@@ -40,7 +41,7 @@ export const statusBridge = {
             }
             return JSON.parse(raw);
         } catch (err) {
-            console.error('[StatusBridge] Failed to read status:', err);
+            logger.error({ err }, '[StatusBridge] Failed to read status from Redis');
             return { connected: false, jid: 'error' };
         }
     }

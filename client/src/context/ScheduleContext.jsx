@@ -1,7 +1,14 @@
+// client/src/context/ScheduleContext.jsx
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getAllCollections } from '../services/collectionService';
-import { getRecurringRules, deleteRecurringRule, createSchedule as apiCreateSchedule } from '../services/scheduleService';
 import toast from 'react-hot-toast';
+import { getAllCollections } from '../services/collectionService';
+import {
+    getRecurringRules,
+    deleteRecurringRule,
+    createSchedule as apiCreateSchedule
+} from '../services/scheduleService';
+import { logger } from '../lib/logger';
 
 const ScheduleContext = createContext();
 
@@ -19,21 +26,29 @@ export const ScheduleProvider = ({ children }) => {
     // Initial Data Fetch
     const refreshData = useCallback(async () => {
         setIsLoading(true);
-        try {
-            const [colsRes, rulesRes] = await Promise.all([
-                getAllCollections(),
-                getRecurringRules()
-            ]);
 
-            if (colsRes.success) setCollections(colsRes.data);
-            if (rulesRes.success) setRecurringRules(rulesRes.data);
+        // Use allSettled so one failure doesn't break the entire UI
+        const [colsResult, rulesResult] = await Promise.allSettled([
+            getAllCollections(),
+            getRecurringRules()
+        ]);
 
-        } catch (err) {
-            console.error(err);
-            toast.error("Failed to load schedule data.");
-        } finally {
-            setIsLoading(false);
+        // 1. Handle Collections
+        if (colsResult.status === 'fulfilled') {
+            setCollections(colsResult.value);
+        } else {
+            logger.error('Failed to load collections:', colsResult.reason);
+            toast.error('Could not load collections');
         }
+
+        // 2. Handle Rules
+        if (rulesResult.status === 'fulfilled') {
+            setRecurringRules(rulesResult.value);
+        } else {
+            logger.error('Failed to load rules:', rulesResult.reason);
+        }
+
+        setIsLoading(false);
     }, []);
 
     useEffect(() => {
@@ -42,18 +57,21 @@ export const ScheduleProvider = ({ children }) => {
 
     // Action: Create Schedule
     const createSchedule = async (payload) => {
-        const result = await apiCreateSchedule(payload);
-        if (result.success) {
-            toast.success(result.data.message || 'Schedule created successfully');
-            // If it was a recurring rule, we need to refresh the list
+        try {
+            const result = await apiCreateSchedule(payload);
+
+            toast.success(result.message || 'Schedule created successfully');
+
+            // If it was a recurring rule, refresh the rules list
             if (payload.type === 'DAILY') {
-                const rulesRes = await getRecurringRules();
-                if (rulesRes.success) setRecurringRules(rulesRes.data);
+                const rules = await getRecurringRules();
+                setRecurringRules(rules);
             }
-            return true;
-        } else {
-            toast.error(result.error);
-            return false;
+
+            return true; // Signal success to component (to close modal/reset form)
+        } catch (error) {
+            toast.error(error.message);
+            return false; // Signal failure
         }
     };
 
@@ -61,12 +79,17 @@ export const ScheduleProvider = ({ children }) => {
     const deleteRule = async (id) => {
         if (!window.confirm("Are you sure you want to stop this daily schedule?")) return;
 
-        const result = await deleteRecurringRule(id);
-        if (result.success) {
+        // Optimistic UI Update: Remove it immediately
+        const prevRules = [...recurringRules];
+        setRecurringRules(prev => prev.filter(r => r.id !== id));
+
+        try {
+            await deleteRecurringRule(id);
             toast.success("Recurring schedule stopped.");
-            setRecurringRules(prev => prev.filter(r => r.id !== id));
-        } else {
-            toast.error(result.error);
+        } catch (error) {
+            // Revert on failure
+            setRecurringRules(prevRules);
+            toast.error(error.message);
         }
     };
 
@@ -75,7 +98,8 @@ export const ScheduleProvider = ({ children }) => {
         recurringRules,
         isLoading,
         createSchedule,
-        deleteRule
+        deleteRule,
+        refreshData // Exported in case other components need to trigger a refresh
     };
 
     return (

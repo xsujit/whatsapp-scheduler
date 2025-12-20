@@ -1,6 +1,7 @@
 // client/src/context/CollectionContext.jsx
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import { getAllGroups } from '../services/groupService';
 import {
     getAllCollections,
@@ -8,26 +9,24 @@ import {
     deleteCollection,
     getCollectionDetails
 } from '../services/collectionService';
-import toast from 'react-hot-toast';
+import { logger } from '../lib/logger';
 
 // 1. Create the Context
 const CollectionContext = createContext();
 
 // 2. Custom Hook to use the Context
-export const useCollection = () => {
-    return useContext(CollectionContext);
-};
+export const useCollection = () => useContext(CollectionContext);
 
 // 3. Provider Component
 export const CollectionProvider = ({ children }) => {
-    // --- Data State (Initial Load) ---
+    // --- Data State ---
     const [groups, setGroups] = useState([]);
     const [collections, setCollections] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
     const [groupLoadError, setGroupLoadError] = useState(false);
 
     // --- Form/View State ---
-    const [viewMode, setViewMode] = useState('idle'); // 'idle', 'create', 'edit'
+    const [viewMode, setViewMode] = useState('idle'); 
     const [editId, setEditId] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -41,16 +40,34 @@ export const CollectionProvider = ({ children }) => {
         fetchInitialData();
     }, []);
 
-    // --- Handlers/Actions ---
+    // --- Actions ---
 
     const fetchInitialData = async () => {
         setLoadingData(true);
-        const [groupsRes, colsRes] = await Promise.all([getAllGroups(), getAllCollections()]);
+        // We use Promise.allSettled to ensure one failure doesn't block the other
+        const [groupsResult, colsResult] = await Promise.allSettled([
+            getAllGroups(),
+            getAllCollections()
+        ]);
 
-        if (groupsRes.success) setGroups(groupsRes.data);
-        else setGroupLoadError(true);
+        // Handle Groups
+        if (groupsResult.status === 'fulfilled') {
+            setGroups(groupsResult.value);
+            setGroupLoadError(false);
+        } else {
+            logger.error('Failed to load groups:', groupsResult.reason);
+            setGroupLoadError(true);
+            toast.error('Failed to load groups list.');
+        }
 
-        if (colsRes.success) setCollections(colsRes.data);
+        // Handle Collections
+        if (colsResult.status === 'fulfilled') {
+            setCollections(colsResult.value);
+        } else {
+            logger.error('Failed to load collections:', colsResult.reason);
+            toast.error('Failed to load collections.');
+        }
+
         setLoadingData(false);
     };
 
@@ -64,51 +81,76 @@ export const CollectionProvider = ({ children }) => {
 
     const handleEdit = async (col) => {
         setLoadingDetails(true);
-        const res = await getCollectionDetails(col.id);
-        setLoadingDetails(false);
-
-        if (res.success) {
+        try {
+            // New Pattern: If this fails, it throws immediately
+            const data = await getCollectionDetails(col.id);
+            
             setEditId(col.id);
-            setName(res.data.name);
-            const jids = (res.data.groups || []).map(g => g.jid);
+            setName(data.name);
+            
+            // Map the nested group objects to just JIDs for the set
+            const jids = (data.groups || []).map(g => g.jid);
             setSelectedJids(new Set(jids));
+            
             setViewMode('edit');
             window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-            toast.error('Failed to load collection details.');
+        } catch (error) {
+            toast.error(error.message || 'Could not load collection details');
+        } finally {
+            setLoadingDetails(false);
         }
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm('Delete this collection?')) return;
-        const res = await deleteCollection(id);
-        if (res.success) {
+        
+        // Optimistic UI Update (optional, but nice)
+        const previousCollections = [...collections];
+        setCollections(prev => prev.filter(c => c.id !== id));
+
+        try {
+            await deleteCollection(id);
             toast.success('Deleted.');
-            fetchInitialData();
+            
             if (editId === id) setViewMode('idle');
-        } else {
-            toast.error(res.error);
+        } catch (error) {
+            // Revert on failure
+            setCollections(previousCollections);
+            toast.error(error.message);
         }
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
-        if (!name || selectedJids.size === 0) {
-            toast.error('Name and at least one group required.');
-            return;
+        
+        // Client-side validation
+        if (!name.trim()) {
+            return toast.error('Collection name is required.');
+        }
+        if (selectedJids.size === 0) {
+            return toast.error('Please select at least one group.');
         }
 
         setSubmitting(true);
-        const payload = { name, groupJids: Array.from(selectedJids) };
-        const res = await saveCollection(payload, editId);
-        setSubmitting(false);
-
-        if (res.success) {
-            toast.success(editId ? 'Updated!' : 'Created!');
+        try {
+            const payload = { 
+                name, 
+                groupJids: Array.from(selectedJids) 
+            };
+            
+            await saveCollection(payload, editId);
+            
+            toast.success(editId ? 'Collection updated!' : 'Collection created!');
             setViewMode('idle');
-            fetchInitialData();
-        } else {
-            toast.error(res.error);
+            
+            // Refresh list to see changes (like item_count updates)
+            const updatedCols = await getAllCollections();
+            setCollections(updatedCols);
+            
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setSubmitting(false);
         }
     };
 

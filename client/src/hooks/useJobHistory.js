@@ -1,6 +1,9 @@
+// client/src/hooks/useJobHistory.js
+
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { getSchedules, deactivateSchedule } from '../services/scheduleService';
 import toast from 'react-hot-toast';
+import { logger } from '../lib/logger';
 
 /**
  * useJobHistory Hook
@@ -19,12 +22,13 @@ export const useJobHistory = () => {
 
     const fetchJobs = async () => {
         try {
-            const res = await getSchedules();
-            if (mountedRef.current && res.success) {
-                setJobs(res.data);
+            const data = await getSchedules();
+
+            if (mountedRef.current) {
+                setJobs(data);
             }
         } catch (error) {
-            console.error("Failed to fetch history:", error);
+            logger.error('Failed to fetch history:', error);
         } finally {
             if (mountedRef.current) setIsLoading(false);
         }
@@ -50,14 +54,14 @@ export const useJobHistory = () => {
         const previousJobs = [...jobs];
         setJobs(jobs.filter(job => job.id !== id));
 
-        const res = await deactivateSchedule(id);
-
-        if (res.success) {
+        try {
+            await deactivateSchedule(id);
             toast.success('Schedule deleted.');
-        } else {
-            // Revert on failure
+        } catch (error) {
             setJobs(previousJobs);
-            toast.error(res.error || 'Failed to delete');
+
+            logger.error('Failed to delete schedule:', error);
+            toast.error(error.message);
         }
     };
 
@@ -67,7 +71,6 @@ export const useJobHistory = () => {
 
         return jobs.filter(job => {
             // Logic assumes 'pending_count' > 0 implies the job is still processing
-            // Adjust based on your specific status enum logic if needed
             const isPending = job.pending_count > 0;
             return filterStatus === 'PENDING' ? isPending : !isPending;
         });

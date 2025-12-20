@@ -3,6 +3,7 @@
 import { Queue, Job } from 'bullmq';
 import { CONFIG } from '#config';
 import { redisConnection } from '#queues/connection';
+import { logger } from '#lib/logger';
 
 export const QUEUE_NAME = '{whatsapp-message-queue}';
 
@@ -38,10 +39,9 @@ export const queueFacade = {
         const job = await Job.fromId(whatsappQueue, uniqueId);
         if (job) {
             await job.remove();
-            console.log(`[Queue] Removed Job: ${uniqueId}`);
+            logger.info({ jobId: uniqueId }, '[Queue] Removed pending Job from Queue');
         } else {
-            // Job might have already processed or doesn't exist
-            console.warn(`[Queue] Job ${uniqueId} not found for removal.`);
+            logger.info({ jobId: uniqueId }, '[Queue] Job not found for removal (already processed?)');
         }
     },
 
@@ -66,7 +66,7 @@ export const queueFacade = {
                 }
             }
         );
-        console.log(`[Queue] Upserted Scheduler: ${schedulerId}`);
+        logger.info({ schedulerId, cron: cronExpression }, '[Queue] Upserted Job Scheduler');
     },
 
     /**
@@ -75,7 +75,7 @@ export const queueFacade = {
     async removeRecurringRule(ruleId) {
         const schedulerId = `scheduler-rule-${ruleId}`;
         await whatsappQueue.removeJobScheduler(schedulerId);
-        console.log(`[Queue] Removed Scheduler: ${schedulerId}`);
+        logger.info({ schedulerId }, '[Queue] Removed Job Scheduler');
     },
 
     /**
@@ -83,5 +83,6 @@ export const queueFacade = {
      */
     async obliterate() {
         await whatsappQueue.obliterate({ force: true });
+        logger.warn('[Queue] Obliterated (All jobs removed)');
     }
 };

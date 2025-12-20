@@ -4,9 +4,9 @@ import { scheduleDAO } from '#db/schedule.dao';
 import { collectionService } from '#services/collection.service';
 import { schedulerService } from '#services/scheduler.service';
 import { getTargetTime } from '#lib/date-utils';
-import { APIError } from 'better-auth/api';
+import { AppError } from '#lib/errors/AppError';
 import { DateTime } from 'luxon';
-import { CONFIG } from '#config';
+import { logger } from '#lib/logger';
 
 export const scheduleService = {
     /**
@@ -19,17 +19,17 @@ export const scheduleService = {
      */
     async createSchedule(userId, payload, options = {}) {
         const { collectionId, content, hour, minute } = payload;
+        
+        // 1. Validate Business Logic
         const groupJids = await collectionService.getGroupJids(collectionId);
-
-        if (groupJids.length === 0) {
-            // If triggered by system, we might log instead of throwing, but for now throw is safe
-            throw new APIError("BAD_REQUEST", { message: "Collection is empty." });
+        if (!groupJids || groupJids.length === 0) {
+            throw new AppError('The selected collection has no groups. Cannot schedule message.', 400);
         }
 
-        // 1. Determine Time
+        // 2. Determine Time
         const intendedTime = options.forcedTime ? options.forcedTime : getTargetTime(hour, minute);
 
-        // 2. Persist to DB
+        // 3. Persist to DB
         const newSchedule = await scheduleDAO.createScheduleWithItems(
             content,
             intendedTime,
@@ -38,7 +38,8 @@ export const scheduleService = {
             options.definitionId || null
         );
 
-        // 3. Queue the Items
+        // 4. Queue the Items
+        // If Redis fails here, it will throw a generic error, caught by Global Handler (500)
         await schedulerService.scheduleOneTimeJobBatch(newSchedule, newSchedule.items);
 
         return newSchedule;
@@ -46,8 +47,9 @@ export const scheduleService = {
 
     async createRecurringSchedule(userId, { collectionId, content, hour, minute }) {
         const groupJids = await collectionService.getGroupJids(collectionId);
-        if (groupJids.length === 0) {
-            throw new APIError("BAD_REQUEST", { message: "Collection is empty." });
+        
+        if (!groupJids || groupJids.length === 0) {
+            throw new AppError('The selected collection has no groups.', 400);
         }
 
         const definition = await scheduleDAO.createDefinition({
@@ -65,7 +67,7 @@ export const scheduleService = {
      * Since BullMQ persists data, we only need to ensure Job Schedulers (Cron) match DB.
      */
     async restoreSchedules() {
-        console.log('--- [Service] Syncing Job Schedulers ---');
+        logger.info('[Service] Restoring schedules');
 
         // 1. Sync Recurring Rules
         // We re-upsert them to ensure the Queue matches the DB exactly.
@@ -78,6 +80,6 @@ export const scheduleService = {
 
         // Note: We do NOT need to restore One-Time jobs. 
         // BullMQ/DragonflyDB saved them to disk. They will resume automatically.
-        console.log('--- [Service] Sync Complete ---');
+        logger.info('[Service] Recurring rules restored');
     }
 };

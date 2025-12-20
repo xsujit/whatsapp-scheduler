@@ -3,6 +3,7 @@
 import { queueFacade } from '#queues/whatsapp.queue';
 import { CONFIG } from '#config';
 import { DateTime } from 'luxon';
+import { logger } from '#lib/logger';
 
 /**
  * @typedef {Object} ScheduleHeader
@@ -21,7 +22,7 @@ export const schedulerService = {
     /**
      * Queues a batch of messages for a One-Time Job.
      * Calculates the precise delay for each item to space them out.
-     * * @param {ScheduleHeader} scheduleHeader - { id, content, scheduled_at }
+     * @param {ScheduleHeader} scheduleHeader - { id, content, scheduled_at }
      * @param {ScheduleItem[]} items - Array of { id, group_jid }
      */
     async scheduleOneTimeJobBatch(scheduleHeader, items) {
@@ -34,7 +35,11 @@ export const schedulerService = {
         let baseDelayMs = targetTime.diff(now).toObject().milliseconds || 0;
         if (baseDelayMs < 0) baseDelayMs = 0;
 
-        console.log(`[Scheduler] Queueing Job #${scheduleId} with ${items.length} items. Starts in ${baseDelayMs}ms`);
+        logger.info({ 
+            scheduleId, 
+            itemCount: items.length, 
+            delayMs: baseDelayMs 
+        }, '[Scheduler] Queueing One-Time Job Batch');
 
         // 2. Queue each item with an incremental delay
         // Spacing: 10 seconds min, 25 seconds max (Randomized)
@@ -70,7 +75,10 @@ export const schedulerService = {
             originalTime: `${hour}:${minute}`
         });
 
-        console.log(`[Scheduler] Rule #${id} synced to BullMQ @ ${hour}:${minute}`);
+        logger.info({ 
+            ruleId: id, 
+            cron: cronExpression 
+        }, '[Scheduler] Recurring Rule synced to BullMQ');
     },
 
     /**
@@ -79,13 +87,16 @@ export const schedulerService = {
      */
     async cancelOneTimeJob(schedule) {
         if (!schedule) {
-            console.warn(`[Scheduler] Schedule not found or already deleted.`);
+            logger.warn('[Scheduler] Attempted to cancel a non-existent or deleted schedule');
             return;
         }
 
         const scheduleId = schedule.id;
 
-        console.log(`[Scheduler] Cancelling One-Time Job #${scheduleId}. Removing ${schedule.items.length} pending items...`);
+        logger.info({ 
+            scheduleId, 
+            pendingItems: schedule.items.length 
+        }, '[Scheduler] Cancelling One-Time Job');
 
         // 2. Remove each pending item from BullMQ
         // We execute this in parallel for speed
@@ -95,7 +106,7 @@ export const schedulerService = {
 
         await Promise.all(removalPromises);
 
-        console.log(`[Scheduler] One-Time Job #${scheduleId} cancelled successfully.`);
+        logger.info({ scheduleId }, '[Scheduler] One-Time Job cancelled successfully');
     },
 
     /**
@@ -105,6 +116,6 @@ export const schedulerService = {
     async cancelRecurringRule(ruleId) {
         await queueFacade.removeRecurringRule(ruleId);
 
-        console.log(`[Scheduler] Recurring Rule #${ruleId} cancelled successfully.`);
+        logger.info({ ruleId }, '[Scheduler] Recurring Rule cancelled successfully');
     }
 };

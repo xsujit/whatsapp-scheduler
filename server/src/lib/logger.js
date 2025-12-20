@@ -1,27 +1,32 @@
-// server/lib/logger.js
+// server/src/lib/logger.js
 
 import { pino } from 'pino';
+import { CONFIG } from '#config';
 
-// Define the desired minimum logging level:
-// 'silent' (no logs)
-// 'error' (level 50)
-// 'warn' (level 40)
-// 'info' (level 30 - current default)
-// 'debug' (level 20)
-const LOG_LEVEL = 'warn'; // Recommended: Only display Warnings, Errors, and Fatal messages.
+/**
+ * Environment-aware logger. 
+ * In Development, it stays pretty and readable. 
+ * In Production, it outputs high-performance NDJSON (Newline Delimited JSON) 
+ * which is standard for ingestion by tools like Datadog, CloudWatch, or ELK Stack.
+ */
 
-// Create a Pino logger instance for Baileys
-// The transport pretty-prints the JSON logs into human-readable format.
-export const logger = pino({
-    level: LOG_LEVEL,
-    transport: {
+// Determine if we are in development mode
+const isDev = process.env.NODE_ENV !== 'production';
+
+// Configuration for Pino
+const transport = isDev ?
+    {
         target: 'pino-pretty',
         options: {
             colorize: true,
-            ignore: 'pid,hostname,class', // Hide unnecessary JSON fields
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname',
         },
-    },
-});
+    } : undefined; // No transport in production (stdout JSON is fastest)
 
-// If you want to completely disable all logs, set LOG_LEVEL to 'silent'
-// or configure Pino to suppress the output.
+export const logger = pino({
+    level: process.env.LOG_LEVEL || 'info',
+    base: isDev ? undefined : { pid: process.pid, hostname: CONFIG.HOSTNAME }, // Add metadata in prod
+    timestamp: pino.stdTimeFunctions.isoTime,
+    transport,
+});

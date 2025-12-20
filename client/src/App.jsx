@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { authClient } from './lib/auth-client';
+import { logger } from './lib/logger';
 
 // Components
 import { AuthForm } from './components/AuthForm';
@@ -25,7 +26,7 @@ function App() {
                 const config = await response.json();
                 setAllowRegistration(config.allowRegistration);
             } catch (err) {
-                console.error('Failed to fetch app config:', err);
+                logger.error('Failed to fetch app config:', err);
             } finally {
                 setIsConfigPending(false);
             }

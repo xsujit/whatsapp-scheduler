@@ -4,70 +4,58 @@ import { scheduleService } from '#services/schedule.service';
 import { scheduleDAO } from '#db/schedule.dao';
 import { validateScheduleData } from '#lib/validation/schedule.schema';
 import { schedulerService } from '#services/scheduler.service';
-import { RECURRENCE_TYPE } from '#types/enums'
+import { RECURRENCE_TYPE } from '#types/enums';
+import { asyncHandler } from '#utils/asyncHandler';
+import { AppError } from '#lib/errors/AppError';
 
 /**
+ * Validation errors will throw automatically and be caught by global handler
  * @route POST /api/schedules
- * @description Creates either a One-Time or Recurring schedule based on payload type.
  */
-export const createSchedule = async (req, res) => {
-    try {
-        const validated = validateScheduleData(req.body);
-        const userId = req.user.id;
-        let result;
+export const createSchedule = asyncHandler(async (req, res) => {
+    const validated = validateScheduleData(req.body);
+    const userId = req.user.id;
 
-        if (validated.type === RECURRENCE_TYPE.DAILY) {
-            result = await scheduleService.createRecurringSchedule(userId, validated);
-        } else {
-            result = await scheduleService.createSchedule(userId, validated);
-        }
+    let result;
+    let message;
 
-        const message = validated.type === RECURRENCE_TYPE.DAILY ? 'Recurring schedule created.' : 'Message scheduled.';
-
-        res.status(201).json({ message, schedule: result });
-    } catch (error) {
-        console.error('[Controller] Create Schedule Error:', error);
-        // Handle specific validation errors if your validator throws them
-        const status = error.statusCode || 500;
-        res.status(status).json({ error: error.message || 'Failed to create schedule.' });
+    if (validated.type === RECURRENCE_TYPE.DAILY) {
+        message = 'Recurring schedule created.';
+        result = await scheduleService.createRecurringSchedule(userId, validated);
+    } else {
+        message = 'Message scheduled.';
+        result = await scheduleService.createSchedule(userId, validated);
     }
-};
+
+    res.status(201).json({ message, schedule: result });
+});
 
 /**
  * @route GET /api/schedules/definitions
- * @description Fetches all active recurring rules (definitions) for the user.
  */
-export const getRecurringSchedules = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const definitions = await scheduleDAO.getDefinitionsByUserId(userId);
-        res.json(definitions);
-    } catch (error) {
-        console.error('[Controller] Failed to fetch definitions:', error);
-        res.status(500).json({ error: 'Failed to retrieve recurring schedules.' });
-    }
-};
+export const getRecurringSchedules = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const definitions = await scheduleDAO.getDefinitionsByUserId(userId);
+    res.json(definitions);
+});
 
 /**
  * @route DELETE /api/schedules/definitions/:id
- * @description Deletes a recurring rule and cancels the cron job.
  */
-export const deleteRecurringSchedule = async (req, res) => {
-    try {
-        const id = parseInt(req.params.id, 10);
-        if (isNaN(id)) return res.status(400).json({ error: 'Invalid definition ID.' });
+export const deleteRecurringSchedule = asyncHandler(async (req, res) => {
+    const id = parseInt(req.params.id, 10);
 
-        await Promise.all([
-            schedulerService.cancelRecurringRule(id),
-            scheduleDAO.deactivateDefinition(id)
-        ]);
-
-        res.status(204).send();
-    } catch (error) {
-        console.error('[Controller] Failed to delete definition:', error);
-        res.status(500).json({ error: 'Failed to delete recurring schedule.' });
+    if (isNaN(id)) {
+        throw new AppError('Invalid schedule definition ID.', 400);
     }
-};
+
+    await Promise.all([
+        schedulerService.cancelRecurringRule(id),
+        scheduleDAO.deactivateDefinition(id)
+    ]);
+
+    res.status(204).send();
+});
 
 // TODO: Deprecate getSchedules and getRecurringSchedules, use getSchedulesOverview instead
 
@@ -76,63 +64,50 @@ export const deleteRecurringSchedule = async (req, res) => {
  * @description Fetches a consolidated view of active recurring rules (Definitions) 
  * and the execution history (Scheduled Messages/Instances).
  */
-export const getSchedulesOverview = async (req, res) => {
-    try {
-        const userId = req.user.id;
+export const getSchedulesOverview = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
 
-        // Fetch both sets of data in parallel for performance
-        const [activeRules, executionHistory] = await Promise.all([
-            scheduleDAO.getDefinitionsByUserId(userId),
-            scheduleDAO.getSchedulesByUserId(userId)
-        ]);
+    // Fetch both sets of data in parallel for performance
+    const [activeRules, executionHistory] = await Promise.all([
+        scheduleDAO.getDefinitionsByUserId(userId),
+        scheduleDAO.getSchedulesByUserId(userId)
+    ]);
 
-        res.json({
-            activeRules,
-            executionHistory
-        });
-    } catch (error) {
-        console.error('[Controller] Failed to fetch schedule overview:', error);
-        res.status(500).json({ error: 'Failed to retrieve schedule data overview.' });
-    }
-};
+    res.json({
+        activeRules,
+        executionHistory
+    });
+});
 
 /**
  * @route GET /api/schedules
  * @description Fetches execution history (One Time jobs + Instances of Recurring jobs).
  */
-export const getSchedules = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        // This DAO method returns the 'scheduled_messages' (History/Log)
-        const schedules = await scheduleDAO.getSchedulesByUserId(userId);
-        res.json(schedules);
-    } catch (error) {
-        console.error('[Controller] Failed to fetch schedules:', error);
-        res.status(500).json({ error: 'Failed to retrieve schedule history.' });
-    }
-};
+export const getSchedules = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+
+    // This DAO method returns the 'scheduled_messages' (History/Log)
+    const schedules = await scheduleDAO.getSchedulesByUserId(userId);
+    res.json(schedules);
+});
 
 /**
  * @route DELETE /api/schedules/:id
  * @description Deletes a specific scheduled message (History/Pending One-Time).
  */
-export const deactivateSchedule = async (req, res) => {
-    try {
-        const id = parseInt(req.params.id, 10);
-        if (isNaN(id)) return res.status(400).json({ error: 'Invalid schedule ID.' });
+export const deactivateSchedule = asyncHandler(async (req, res) => {
+    const id = parseInt(req.params.id, 10);
 
-        console.log(`[Controller] Cancelling One-Time Job #${id}`);
-
-        const schedule = await scheduleDAO.getScheduleWithPendingItems(id);
-
-        await Promise.all([
-            schedulerService.cancelOneTimeJob(schedule),
-            scheduleDAO.deactivateSchedule(id)
-        ]);
-
-        res.status(204).send();
-    } catch (error) {
-        console.error('[Controller] Failed to delete schedule:', error);
-        res.status(500).json({ error: 'Failed to delete schedule.' });
+    if (isNaN(id)) {
+        throw new AppError('Invalid schedule ID.', 400);
     }
-};
+
+    const schedule = await scheduleDAO.getScheduleWithPendingItems(id);
+
+    await Promise.all([
+        schedulerService.cancelOneTimeJob(schedule),
+        scheduleDAO.deactivateSchedule(id)
+    ]);
+
+    res.status(204).send();
+});

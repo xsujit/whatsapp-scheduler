@@ -2,6 +2,7 @@
 
 import { Redis } from 'ioredis';
 import { CONFIG } from '#config';
+import { logger } from '#lib/logger';
 
 const connectionOptions = {
     host: CONFIG.LOCALHOST,
@@ -13,13 +14,13 @@ const connectionOptions = {
 export const redisConnection = new Redis(connectionOptions);
 
 redisConnection.on('error', (err) => {
-    console.error('[Redis] Connection Error:', err);
+    logger.error({ err }, '[Redis] Connection Error');
 });
 
 redisConnection.on('connect', () => {
-    console.log('[Redis] Connected to DragonflyDB');
+    logger.info('[Redis] Connected to DragonflyDB');
 });
 
 redisConnection.on('reconnecting', () => {
-    console.log('[Redis] Reconnecting to DragonflyDB');
+    logger.warn('[Redis] Reconnecting to DragonflyDB');
 });

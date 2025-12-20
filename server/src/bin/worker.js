@@ -1,7 +1,15 @@
 // server/src/bin/worker.js
 
+/**
+ * The Worker process doesn't run inside Express, 
+ * so it doesn't have the middleware safety net. 
+ * Manually implement Process-Level Error Handling here 
+ * to ensure it logs crashes correctly (in JSON) before exiting.
+ */
+
 import { CONFIG } from '#config';
 import { initializeSchema } from '#db';
+import { logger } from '#lib/logger';
 
 // Services
 import { whatsappService } from '#services/whatsapp.service';
@@ -17,54 +25,78 @@ import { statusBridge } from '#lib/status.bridge';
 
 async function startWorker() {
     try {
-        console.log('[Startup] Initializing Database...');
+        logger.info('[Startup] Initializing Database...');
         await initializeSchema();
 
-        console.log('[Startup] Initializing WhatsApp Service...');
+        logger.info('[Startup] Initializing WhatsApp Service...');
         await whatsappService.initialize();
         await scheduleService.restoreSchedules();
 
-        console.log('[Startup] Starting BullMQ Worker...');
+        logger.info('[Startup] Starting BullMQ Worker...');
         const worker = createWorker({
             whatsappService,
             scheduleService,
             scheduleDAO
         });
 
+        // Heartbeat for status updates
         const heartbeat = setInterval(async () => {
-            const status = whatsappService.getStatus();
-            await statusBridge.updateStatus(status);
-        }, 5000); // Update every 5 seconds
+            try {
+                const status = whatsappService.getStatus();
+                await statusBridge.updateStatus(status);
+            } catch (err) {
+                logger.error({ err }, 'Failed to update status bridge');
+            }
+        }, 5000);
 
-        console.log(`\n================ WhatsApp Worker Started ================`);
-        console.log(` Drop Tables: ${CONFIG.DROP_SCHEDULED_MESSAGES}`);
-        console.log(` Timezone: ${CONFIG.TIMEZONE}`);
-        console.log(`=========================================================\n`);
+        logger.info({
+            dropTables: CONFIG.DROP_SCHEDULED_MESSAGES,
+            timezone: CONFIG.TIMEZONE,
+        }, 'WhatsApp Worker Started');
 
         // --- Graceful Shutdown ---
         const shutdown = async (signal) => {
-            console.log(`\n[${signal}] Shutting down Worker...`);
+            logger.warn({ signal }, 'Shutting down Worker...');
             clearInterval(heartbeat);
 
-            // 1. Close BullMQ
-            console.log('[Queue] Closing Worker...');
-            await worker.close();
-            await whatsappQueue.close();
+            try {
+                // 1. Close BullMQ
+                logger.info('Closing Worker...');
+                await worker.close();
+                await whatsappQueue.close();
 
-            // 2. Ideally destroy WhatsApp socket here if supported
-            // await whatsappService.destroy(); 
+                // 2. Ideally destroy WhatsApp socket here if supported
+                // await whatsappService.destroy(); 
 
-            console.log('[Shutdown] Complete.');
-            process.exit(0);
+                logger.info('Shutdown complete.');
+                process.exit(0);
+            } catch (err) {
+                logger.error({ err }, 'Error during shutdown');
+                process.exit(1);
+            }
         };
 
         process.on('SIGTERM', () => shutdown('SIGTERM'));
         process.on('SIGINT', () => shutdown('SIGINT'));
 
     } catch (error) {
-        console.error('[FATAL] Worker startup failed:', error);
+        logger.fatal({ err: error }, 'Worker startup failed');
         process.exit(1);
     }
 }
+
+// --- Global Process Safety Nets ---
+
+// Catch synchronous errors that were not caught by try/catch
+process.on('uncaughtException', (err) => {
+    logger.fatal({ err }, 'Uncaught Exception! Shutting down...');
+    process.exit(1);
+});
+
+// Catch asynchronous promises that rejected but weren't caught
+process.on('unhandledRejection', (reason) => {
+    logger.fatal({ err: reason }, 'Unhandled Rejection! Shutting down...');
+    process.exit(1);
+});
 
 startWorker();

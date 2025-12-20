@@ -1,6 +1,7 @@
 // client/src/components/Admin.jsx
 
 import React, { useEffect, useState } from 'react';
+import { logger } from '../lib/logger';
 
 export const Admin = () => {
     const [health, setHealth] = useState(null);
@@ -14,7 +15,7 @@ export const Admin = () => {
                 const data = await res.json();
                 setHealth(data);
             } catch (err) {
-                console.error('Health check failed', err);
+                logger.error('Health check failed', err);
             } finally {
                 setLoading(false);
             }
