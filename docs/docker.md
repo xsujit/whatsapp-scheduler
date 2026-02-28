@@ -332,13 +332,46 @@ docker compose build
 
 # 3. Start all services
 docker compose up -d
+```
 
-# 4. Run Better-Auth DB migration (one-time only)
+#### Step 4 — Create Better-Auth tables (one-time only)
+
+Better-Auth manages its own tables (`user`, `session`, `account`) separately
+from the app schema. They must be created before the first sign-in or sign-up,
+otherwise the API returns a 500 (`no such table: user`).
+
+```bash
 docker compose exec api npx @better-auth/cli@latest migrate
+```
 
-# 5. Watch Worker logs to scan the WhatsApp QR code
+When prompted, confirm to apply the migration. This only needs to be run once
+per fresh database (i.e. after `docker compose down -v` or on a new server).
+
+#### Step 5 — Scan the WhatsApp QR code
+
+The QR code is printed as ASCII art directly to the Worker's stdout, mixed in
+between the JSON log lines. Watch the live logs:
+
+```bash
 docker logs -f wa-scheduler-worker
 ```
+
+Wait for this line to appear:
+
+```text
+"[WA] Action Required: Scan QR Code"
+```
+
+The ASCII QR block prints immediately below it. Open WhatsApp on your phone →
+Linked Devices → Link a Device, then scan. Once authenticated the Worker logs:
+
+```text
+"[WA] WhatsApp Client Connected"
+```
+
+The session is then persisted to the `wa-session` volume and survives container
+restarts — you will not need to scan again unless the session is explicitly
+deleted.
 
 ---
 
@@ -386,6 +419,49 @@ docker run --rm -v wa-db:/data -v $(pwd):/backup alpine \
 # Backup WhatsApp session
 docker run --rm -v wa-session:/data -v $(pwd):/backup alpine \
   tar czf /backup/wa-session-backup.tar.gz -C /data .
+```
+
+---
+
+### Troubleshooting
+
+#### Worker loops with `405 Connection Failure` and never shows QR
+
+WhatsApp periodically updates its Web client protocol. If the version hardcoded
+in Baileys is out of date, WhatsApp rejects the connection before issuing a QR
+code. The fix is to call `fetchLatestBaileysVersion()` so Baileys fetches the
+current accepted version at startup.
+
+In `server/src/services/whatsapp.service.js`:
+
+```js
+// Import
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } from 'baileys';
+
+// In initialize(), before makeWASocket():
+const { version } = await fetchLatestBaileysVersion();
+
+waSocket = makeWASocket({
+    version,   // ← add this
+    auth: state,
+    ...
+});
+```
+
+After the change, rebuild the worker image and restart:
+
+```bash
+docker compose build worker
+docker compose restart worker
+```
+
+#### Sign-up / sign-in returns 500
+
+Run the Better-Auth migration (Step 4 above). The most common cause is that the
+`user` table does not exist yet in a fresh database.
+
+```bash
+docker compose exec api npx @better-auth/cli@latest migrate
 ```
 
 ---
