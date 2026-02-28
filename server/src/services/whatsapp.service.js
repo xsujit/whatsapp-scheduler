@@ -1,6 +1,6 @@
 // server/src/services/whatsapp.service.js
 
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from 'baileys';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } from 'baileys';
 import NodeCache from 'node-cache';
 import qrcode from 'qrcode-terminal';
 import { CONFIG } from '#config';
@@ -30,8 +30,10 @@ export const whatsappService = {
         logger.info('[WA] Initializing WhatsApp Service...');
 
         const { state, saveCreds } = await useMultiFileAuthState(CONFIG.SESSION_PATH);
+        const { version } = await fetchLatestBaileysVersion();
 
         waSocket = makeWASocket({
+            version,
             auth: state,
             printQRInTerminal: false,
             logger: logger,
