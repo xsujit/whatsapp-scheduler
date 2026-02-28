@@ -2,10 +2,11 @@
 
 import Database from 'better-sqlite3';
 import { Kysely, SqliteDialect, sql } from 'kysely';
+import { CONFIG } from '#config';
 import { MESSAGE_STATUS, MESSAGE_STATUS_VALUES } from '#types/enums';
 import { logger } from '#lib/logger';
 
-const rawDb = new Database('app.db');
+const rawDb = new Database(CONFIG.DB_PATH);
 rawDb.pragma('journal_mode = WAL');
 rawDb.pragma('foreign_keys = ON');
 

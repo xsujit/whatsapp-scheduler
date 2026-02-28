@@ -1,0 +1,73 @@
+# Shared config for api and worker (both use the same image + env)
+x-app-common: &app-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: .env
+  environment:
+    LOCALHOST: "0.0.0.0"
+    REDIS_HOST: dragonfly
+    DB_PATH: data/app.db
+  depends_on:
+    dragonfly:
+      condition: service_healthy
+  networks:
+    - wa-scheduler-net
+  restart: unless-stopped
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    container_name: wa-scheduler-dragonfly
+    restart: unless-stopped
+    ulimits:
+      memlock: -1
+    networks:
+      - wa-scheduler-net
+    volumes:
+      - wa-dragonfly:/data
+    command: [
+      "--requirepass=${REDIS_PASSWORD}",
+      "--cluster_mode=emulated",
+      "--lock_on_hashtags",
+      "--dir=/data",
+      "--dbfilename=dump",
+      "--snapshot_cron=0 */6 * * *"
+    ]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    <<: *app-common
+    container_name: wa-scheduler-api
+    command: ["node", "src/bin/server.js"]
+    ports:
+      - "127.0.0.1:${PORT}:${PORT}"
+    volumes:
+      - wa-db:/app/server/data
+    mem_limit: 300m
+
+  worker:
+    <<: *app-common
+    container_name: wa-scheduler-worker
+    command: ["node", "src/bin/worker.js"]
+    volumes:
+      - wa-db:/app/server/data
+      - wa-session:/app/server/baileys_session
+    mem_limit: 512m
+
+networks:
+  wa-scheduler-net:
+    driver: bridge
+
+volumes:
+  wa-db:
+  wa-session:
+  wa-dragonfly:

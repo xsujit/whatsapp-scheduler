@@ -1,0 +1,23 @@
+# Dependencies (rebuilt inside Docker)
+server/node_modules
+client/node_modules
+
+# Runtime data (managed via Docker volumes)
+server/baileys_session
+server/app.db
+server/app.db-shm
+server/app.db-wal
+server/pm2
+
+# Secrets (never in image)
+server/.env
+.env
+
+# Build output (rebuilt inside Docker)
+client/dist
+
+# Git + docs (not needed in image)
+.git
+docs
+*.md
+CLAUDE.md

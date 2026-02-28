@@ -5,7 +5,7 @@ import { CONFIG } from '#config';
 import { logger } from '#lib/logger';
 
 const connectionOptions = {
-    host: CONFIG.LOCALHOST,
+    host: CONFIG.REDIS_HOST,
     port: CONFIG.REDIS_PORT,
     password: CONFIG.REDIS_PASSWORD,
     maxRetriesPerRequest: null, // Critical for BullMQ
