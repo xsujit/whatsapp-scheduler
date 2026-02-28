@@ -8,19 +8,44 @@ All commands are safe to run on a production server
 
 ---
 
-## NPM
+## Docker (current deployment)
+
+All manual npm steps below are replaced by a single command:
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+`docker compose build` runs all three Dockerfile stages internally:
+
+| Traditional step | Handled by |
+| :--- | :--- |
+| `npm i` (client) | `client-builder` stage |
+| `npm run build` (client) | `client-builder` stage |
+| `rm -rf node_modules` | Not needed — each stage is isolated |
+| `npm install --omit=dev` (server) | `server-deps` stage |
+| `npm run start` | `docker compose up -d` |
+
+The Better-Auth migration (`npx @better-auth/cli@latest migrate`) is only
+needed once on a fresh database. See `docs/docker.md` for full deployment steps.
+
+---
+
+## NPM (legacy — PM2 deployment)
 
 ### CLIENT
 
-npm i  
-npm run build  
-rm -rf node_modules  
+npm i
+npm run build
+rm -rf node_modules
 npm install --omit=dev
 
 ### SERVER
 
-npx @better-auth/cli@latest migrate  
-npm install --omit=dev  
+npx @better-auth/cli@latest migrate
+npm install --omit=dev
 npm run start
 
 ---
