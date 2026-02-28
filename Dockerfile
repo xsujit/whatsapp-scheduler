@@ -1,5 +1,5 @@
 # ─── Stage 1: Build the React client ────────────────────────────────────────
-FROM node:22-alpine AS client-builder
+FROM node:24-alpine3.23 AS client-builder
 
 WORKDIR /app/client
 
@@ -10,7 +10,7 @@ COPY client/ ./
 RUN npm run build
 
 # ─── Stage 2: Install server production dependencies ─────────────────────────
-FROM node:22-alpine AS server-deps
+FROM node:24-alpine3.23 AS server-deps
 
 # Build tools required for better-sqlite3 native addon
 RUN apk add --no-cache python3 make g++
@@ -21,7 +21,7 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
 # ─── Stage 3: Production image ───────────────────────────────────────────────
-FROM node:22-alpine AS production
+FROM node:24-alpine3.23 AS production
 
 # Non-root user (uid 1001 matches the node user in alpine images)
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001 -G nodejs

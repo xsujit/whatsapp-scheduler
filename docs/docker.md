@@ -223,9 +223,9 @@ Three build stages:
 
 | Stage | Base | Purpose |
 | :--- | :--- | :--- |
-| `client-builder` | `node:22-alpine` | Install client deps, run `npm run build`, produce `client/dist/` |
-| `server-deps` | `node:22-alpine` + `python3 make g++` | Compile `better-sqlite3` native addon, run `npm ci --omit=dev` |
-| `production` | `node:22-alpine` | Minimal image — no build tools. Copies source, compiled `node_modules`, and built `client/dist/`. Runs as non-root user `nodejs` (uid 1001) |
+| `client-builder` | `node:24-alpine3.23` | Install client deps, run `npm run build`, produce `client/dist/` |
+| `server-deps` | `node:24-alpine3.23` + `python3 make g++` | Compile `better-sqlite3` native addon, run `npm ci --omit=dev` |
+| `production` | `node:24-alpine3.23` | Minimal image — no build tools. Copies source, compiled `node_modules`, and built `client/dist/`. Runs as non-root user `nodejs` (uid 1001) |
 
 The `production` stage pre-creates `/app/server/baileys_session` and
 `/app/server/data` with correct ownership so volume mounts inherit the right

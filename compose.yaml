@@ -18,6 +18,11 @@ x-app-common: &app-common
     - ALL
   security_opt:
     - no-new-privileges:true
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
 
 services:
   dragonfly:
@@ -30,6 +35,11 @@ services:
       - wa-scheduler-net
     volumes:
       - wa-dragonfly:/data
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: [
       "--requirepass=${REDIS_PASSWORD}",
       "--cluster_mode=emulated",
