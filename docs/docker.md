@@ -375,11 +375,53 @@ deleted.
 
 ---
 
-### Subsequent Deploys (After Code Changes)
+### Production Deployments
+
+#### Code change (no dependency change)
+
+Docker's layer cache means only the stages affected by the change are rebuilt.
+If only `server/src/` changed, `npm ci` is not re-run. If only client files
+changed, the server deps stage is skipped entirely.
 
 ```bash
+git pull
 docker compose build
 docker compose up -d
+```
+
+`docker compose up -d` detects that the image has changed and recreates only
+the affected containers. DragonflyDB is untouched. There is a brief downtime
+(seconds) while each container is replaced. BullMQ jobs in flight are safe —
+their state is persisted in DragonflyDB and resume when the worker comes back.
+
+#### Dependency change (`package.json` / `package-lock.json`)
+
+No extra steps — `docker compose build` detects the changed lock file,
+invalidates the `server-deps` cache, and re-runs `npm ci` automatically.
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+#### Environment variable change (`.env` only)
+
+No rebuild needed. `docker compose up -d` re-reads `.env` and recreates the
+containers with the new values.
+
+```bash
+# Edit .env on the server, then:
+docker compose up -d
+```
+
+#### Cleaning up old images
+
+Every build leaves the previous image dangling on disk. Prune them periodically
+to reclaim space:
+
+```bash
+docker image prune -f
 ```
 
 ---
