@@ -42,12 +42,12 @@ export const schedulerService = {
         }, '[Scheduler] Queueing One-Time Job Batch');
 
         // 2. Queue each item with an incremental delay
-        // Spacing: 10 seconds min, 25 seconds max (Randomized)
+        // Spacing: 12 seconds min, 25 seconds max (Randomized)
         let accumulatedDelay = baseDelayMs;
 
         for (const item of items) {
             // Random spacing to look human
-            const spacing = Math.floor(Math.random() * (25000 - 10000 + 1) + 10000);
+            const spacing = Math.floor(Math.random() * (25000 - 12000 + 1) + 12000);
 
             await queueFacade.addMessageJob(
                 `msg_item_${item.id}`, // Unique Job ID
